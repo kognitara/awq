@@ -389,7 +389,7 @@ fn cli() -> Command {
                         ),
                 )
                 .subcommand(Command::new("list").about("List all tags"))
-                .subcommand(Command::new("verify").about("Verify all tags")),
+                .subcommand(Command::new("audit").about("Verify all tags")),
         )
         .subcommand(
             Command::new("spotify")
@@ -1252,7 +1252,7 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
                 connect_lys(current_dir.as_path()).map_err(|e| Error::other(e.to_string()))?;
 
             match sub_matches.subcommand() {
-                Some(("verify", _)) => audit_tags(),
+                Some(("audit", _)) => audit_tags(),
                 Some(("create", args)) => {
                     let name = args.get_one::<String>("name").unwrap();
                     let msg = args.get_one::<String>("message").map(|s| s.as_str());
