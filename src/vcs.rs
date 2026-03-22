@@ -1149,18 +1149,8 @@ pub fn log(conn: &Connection, page: usize, per_page: usize) -> Result<(), sqlite
             ok(format!("No commits on {page} page.").as_str());
         }
     } else {
-        if let Some(mut child) = start_pager()
-            && let Some(mut stdin) = child.stdin.take()
-        {
-            let output = rendered.join("\n");
-            let _ = stdin.write_all(output.as_bytes());
-            // Drop stdin to close it, so pager knows we're done
-            drop(stdin);
-            let _ = child.wait();
-        } else {
-            println!("{}", rendered.join("\n"));
-        }
-
+        let logs = rendered.join("");
+        internal_pager(logs.to_string()).expect("failed to page");
         let x = rendered.len();
         println!();
         let mut footer = format!("Page {page}/{total_pages} ({x}/{per_page} commits).");

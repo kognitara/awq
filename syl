@@ -1,3 +1,4 @@
 target
 breathes
 .env
+.git/

@@ -17,7 +17,6 @@ use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use once_cell::sync::OnceCell;
 use pulldown_cmark::{Options, Parser, html as cmark_html};
-use qr2term::qr::Qr;
 use serde::Deserialize;
 use sqlite::Connection;
 use std::net::SocketAddr;

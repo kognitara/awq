@@ -1,5 +1,5 @@
-use crate::branch::create_branch;
 use crate::utils::ok;
+use crate::{branch::create_branch, vcs::internal_pager};
 use sqlite::{Connection, Error, State};
 use tabled::{Table, Tabled};
 #[derive(Tabled)]
@@ -65,7 +65,9 @@ pub fn list_todos(conn: &Connection) -> Result<(), Error> {
         ok("No pending tasks. You're all caught up!");
     } else {
         let t = Table::new(&todos);
-        println!("{t}");
+        if internal_pager(t.to_string()).is_ok() {
+            ok("bye");
+        }
     }
     Ok(())
 }
