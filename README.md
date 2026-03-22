@@ -1,8 +1,6 @@
 # Lys
 
-ˋˋˋtsch
-# tcsh completion for lys
-
+ˋˋˋsh
 set _lys_cmds = (init new email web branch verify summary status push pull prune shell mount tree import keygen serve audit log diff clone health todo commit restore chat sync checkout feat hotfix tag spotify video banner help)
 
 complete lys \
