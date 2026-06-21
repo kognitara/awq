@@ -42,7 +42,6 @@ reqwest = { version = "0.13.2", features = ["blocking"] }
 pulldown-cmark = "0.13.0"
 rustyline = "17.0.2"
 once_cell = "1.19.0"
-breathes = "0.1.5"
 qr2term = "0.3.3"
 serde_yaml = "0.9.34"
 lettre = { version = "0.11.19", features = ["tokio1", "tokio1-native-tls"] }
