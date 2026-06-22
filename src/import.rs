@@ -200,8 +200,8 @@ pub fn import_from_git(
     let pb_git = m.add(ProgressBar::new(0));
     pb_git.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.white} Git [{bar:40.white}] {pos}/{len} objects ({msg})")?
-            .progress_chars("=>-"),
+            .template("{spinner:.white} Git [{bar:.white}] {pos}/{len} objects ({msg})")?
+            .progress_chars("=> "),
     );
 
     let mut callbacks = RemoteCallbacks::new();
@@ -243,7 +243,6 @@ pub fn import_from_git(
     let repo_raw = repo_builder.clone(git_url, &temp_path)?;
     let repo = Mutex::new(repo_raw);
     pb_git.finish_with_message("Git clone complete");
-    crate::crypto::generate_keypair(Path::new(target_dir)).expect("failed to set key");
     let conn = db::connect_lys(target_dir)?;
     let store_db_path = target_dir.join(".lys/db/store.db");
     let store_conn = Mutex::new(sqlite::open(store_db_path)?);
@@ -270,9 +269,9 @@ pub fn import_from_git(
         let pb = m.add(ProgressBar::new(oids.len() as u64));
         pb.set_style(
             ProgressStyle::default_bar()
-                .template("{spinner:.green} Lys [{bar:40.white}] {pos}/{len} {msg}")
+                .template("{spinner:.white} Lys [{bar:.white}] {pos}/{len} {msg}")
                 .expect("Failed to set progress bar style")
-                .progress_chars("=>-"),
+                .progress_chars("=> "),
         );
         (oids, pb)
     };
@@ -351,6 +350,7 @@ pub fn import_from_git(
     if !keep_git {
         std::fs::remove_dir_all(&temp_path)?;
     }
+    crate::crypto::generate_keypair(Path::new(target_dir)).expect("failed to set key");
     vcs::checkout_head(&conn, target_dir)?;
 
     if set_origin {
