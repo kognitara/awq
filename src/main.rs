@@ -296,18 +296,18 @@ fn cli() -> Command {
             Command::new("todo")
                 .about("Manage project tasks")
                 .subcommand(
-                  Command::new("add").about("add todos")
+                  Command::new("add").about("Add todos")
                 )
                 .subcommand(
-                    Command::new("start").arg(
+                    Command::new("start").about("Start a todo").arg(
                         Arg::new("id")
                             .required(true)
                             .value_parser(value_parser!(i64)),
                     ),
                 )
-                .subcommand(Command::new("list"))
+                .subcommand(Command::new("list").about("List all todos"))
                 .subcommand(
-                    Command::new("close").arg(
+                    Command::new("close").about("Close a todo").arg(
                         Arg::new("id")
                             .required(true)
                             .value_parser(value_parser!(i64)),
