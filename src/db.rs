@@ -63,6 +63,7 @@ pub const LYS_INIT: &str = "CREATE TABLE IF NOT EXISTS tree_nodes (
         tree_hash TEXT NOT NULL,         -- Hash du 'tree' racine du commit
         author TEXT NOT NULL,
         message TEXT NOT NULL,
+        ticket TEXT NOT NULL,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         signature TEXT,
         nix_env_hash TEXT
@@ -140,6 +141,7 @@ pub struct CommitQueryResult {
     pub hash: String,
     pub author: String,
     pub message: String,
+    pub ticket: String,
     pub timestamp: String,
 }
 
@@ -388,6 +390,7 @@ pub fn query_commits(
             hash: stmt.read::<String, _>("hash").unwrap_or_default(),
             author: stmt.read::<String, _>("author").unwrap_or_default(),
             message: stmt.read::<String, _>("message").unwrap_or_default(),
+            ticket: stmt.read::<String, _>("ticket").unwrap_or_default(),
             timestamp: stmt.read::<String, _>("timestamp").unwrap_or_default(),
         });
     }

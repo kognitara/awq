@@ -34,7 +34,7 @@ use std::fs::read_to_string;
 use std::io::{Error, Write, stdout};
 use std::path::MAIN_SEPARATOR_STR;
 use std::path::Path;
-use std::process::{Command as Cmd, Stdio};
+use std::process::{Command as Cmd, Stdio, exit};
 use tabled::Table;
 use tabled::builder::Builder;
 use tabled::settings::Style;
@@ -295,9 +295,14 @@ fn cli() -> Command {
         .subcommand(
             Command::new("todo")
                 .about("Manage project tasks")
-                .subcommand(
-                  Command::new("add").about("Add todos")
-                )
+                                .subcommand(
+                                    Command::new("add")
+                                        .about("Add todos")
+                                        .arg(Arg::new("title").help("Todo title").required(false).action(ArgAction::Set))
+                                        .arg(Arg::new("user").short('u').long("user").help("Assign to").required(false).action(ArgAction::Set))
+                                        .arg(Arg::new("due").short('d').long("due").help("Due date (YYYY-MM-DD)").required(false).action(ArgAction::Set))
+                                        .arg(Arg::new("description").short('m').long("message").help("Description").required(false).action(ArgAction::Set))
+                                )
                 .subcommand(
                     Command::new("start").about("Start a todo").arg(
                         Arg::new("id")
@@ -417,20 +422,26 @@ fn perform_commit() -> Result<(), Error> {
     let current_dir_str = current_dir.to_str().unwrap();
 
     if !Path::new(".lys").exists() {
-        return Err(Error::other("Not a lys repository."));
+        eprintln!("Error: Not a lys repository. Please run 'lys init' to initialize the repository.");
+        exit(1);
     }
 
     let connection =
         connect_lys(Path::new(current_dir_str)).map_err(|e| Error::other(e.to_string()))?;
 
     // On récupère le message depuis les arguments CLI
-    let message = commit::Commit::new()
-        .commit()
-        .expect("commit fail")
-        .to_string();
+    let mut binding = commit::Commit::new();
+    let ticket = binding.commit().expect("commit fail");
+    let message = binding.to_string();
 
-    vcs::commit(&connection, message.as_str(), author().as_str())
-        .map_err(|e| Error::other(e.to_string()))?;
+    vcs::commit(
+        &connection,
+        message.as_str(),
+        author().as_str(),
+        ticket.title.as_str(),
+    )
+    .map_err(|e| Error::other(e.to_string()))?;
+    todo::complete_todo(&connection, ticket.id).expect("failed to close todo");
 
     Ok(())
 }
@@ -1318,29 +1329,51 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
             let conn =
                 connect_lys(current_dir.as_path()).expect("failed to connect to the database");
             match sub.subcommand() {
-                Some(("add", _)) => {
+                Some(("add", args)) => {
+                    // If a title (or other args) was provided, handle non-interactive add
+                    if let Some(title) = args.get_one::<String>("title") {
+                        let conn =
+                            connect_lys(Path::new(".")).expect("failed to connect to the db");
+                        let description = args
+                            .get_one::<String>("description")
+                            .map(|s| s.as_str())
+                            .unwrap_or("");
+                        let assigned_to = args
+                            .get_one::<String>("user")
+                            .map(|s| s.as_str())
+                            .unwrap_or("me");
+                        let due_date = args
+                            .get_one::<String>("due")
+                            .map(|s| s.as_str())
+                            .unwrap_or("No limit");
+
+                        todo::add_todo(&conn, title.as_str(), description, assigned_to, due_date)
+                            .map_err(|e| Error::other(e.to_string()))?;
+                        ok(format!(
+                            "Todo added: {} (assigned to: {}, due: {})",
+                            title, assigned_to, due_date
+                        )
+                        .as_str());
+                        return Ok(());
+                    }
+
+                    // Fallback to interactive mode when no title arg
                     loop {
                         execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
                         let title = Text::new("Title:").prompt().expect("failed to get title");
                         let description = Editor::new("Description:")
                             .prompt()
                             .expect("failed to get todo description");
-                        let mut users: Vec<String> = Vec::new();
-                        let query = "SELECT * FROM contributors";
                         let conn =
                             connect_lys(Path::new(".")).expect("faield to cconnect to the db");
-                        conn.iterate(query, |pairs| {
-                            for &(name, value) in pairs.iter() {
-                                if name == "name" {
-                                    users.push(value.unwrap().to_string());
-                                }
-                            }
-                            true
-                        })
-                        .unwrap();
-                        let user = Select::new("Assign to:", users)
-                            .prompt()
-                            .expect("failed to get asigned to ");
+                        let users = db::get_unique_contributors(&conn)
+                            .unwrap_or(Vec::from([(String::from("me"), 1)]));
+                        let user = Select::new(
+                            "Assign to:",
+                            users.iter().map(|(u, _)| u).collect::<Vec<&String>>(),
+                        )
+                        .prompt()
+                        .expect("failed to get asigned to ");
                         let date = DateSelect::new("Due date:")
                             .prompt()
                             .expect("failed to get due date");

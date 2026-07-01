@@ -101,10 +101,10 @@ pub fn ko(description: &str) {
 }
 pub fn ok_status(verb: &FileStatus) {
     let (p, symbol) = match verb {
-        FileStatus::Modified(p, _) => (p.display().to_string(), String::from(" * ")),
+        FileStatus::Modified(p, _) => (p.display().to_string(), String::from(" ~ ")),
         FileStatus::Deleted(p, _) => (p.display().to_string(), String::from(" - ")),
         FileStatus::New(p) => (p.display().to_string(), String::from(" + ")),
-        FileStatus::Unchanged => (String::new(), String::from(" . ")),
+        FileStatus::Unchanged => (String::new(), String::from(" * ")),
     };
 
     let x = term_width();

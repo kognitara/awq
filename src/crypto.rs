@@ -3,6 +3,7 @@ use ed25519_dalek::Signature;
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::VerifyingKey;
 use ed25519_dalek::{Signer, Verifier};
+use rand::rngs::OsRng;
 use sqlite::{Connection, State};
 use std::fs;
 use std::fs::File;
@@ -34,10 +35,10 @@ pub fn generate_keypair(root_path: &Path) -> Result<(), String> {
     if secret_path.exists() {
         return Err("An identity already exists for this repository.".to_string());
     }
-
+    let mut rng = OsRng;
     // Génération cryptographique
-    let signing_key = SigningKey::generate(&mut rand::rng());
-    let verifying_key = signing_key.verifying_key();
+    let signing_key = SigningKey::generate(&mut rng);
+    let verifying_key: VerifyingKey = signing_key.verifying_key();
 
     // Sauvegarde
     let mut file = File::create(secret_path).expect("failed to create secret key");

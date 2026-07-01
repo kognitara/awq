@@ -589,7 +589,7 @@ fn get_youtube_embed_url(url: &str) -> Option<String> {
     None
 }
 
-fn time_ago(timestamp: &str) -> String {
+pub fn time_ago(timestamp: &str) -> String {
     let ts = timestamp.trim();
     if ts.is_empty() {
         return String::new();
@@ -3268,7 +3268,7 @@ async fn show_chat() -> impl IntoResponse {
         {
             std::env::var("USERNAME")
                 .or_else(|_| std::env::var("USER"))
-                .unwrap_or_else(|_| "web".into())
+                .unwrap_or_else(|| "web".into())
         }
         #[cfg(not(any(unix, windows)))]
         {
@@ -3660,6 +3660,8 @@ fn render_diff(old: &[u8], new: &[u8], mode: &str) -> String {
     }
 
     let diff = similar::TextDiff::from_lines(&old_s, &new_s);
+    let old_lines: Vec<&str> = old_s.lines().collect();
+    let new_lines: Vec<&str> = new_s.lines().collect();
 
     if mode == "side-by-side" {
         let mut out = String::from("<table class='diff-ss-table'>");
@@ -3672,8 +3674,8 @@ fn render_diff(old: &[u8], new: &[u8], mode: &str) -> String {
                         len,
                     } => {
                         for i in 0..len {
-                            let old_line = diff.old_slices()[old_index + i];
-                            let new_line = diff.new_slices()[new_index + i];
+                            let old_line = old_lines[old_index + i];
+                            let new_line = new_lines[new_index + i];
                             out.push_str(&format!(
                                 "<tr class='diff-equal'>\
                                     <td class='diff-line-num'>{}</td><td class='diff-ss-left'>{}</td>\
@@ -3688,7 +3690,7 @@ fn render_diff(old: &[u8], new: &[u8], mode: &str) -> String {
                         old_index, old_len, ..
                     } => {
                         for i in 0..old_len {
-                            let old_line = diff.old_slices()[old_index + i];
+                            let old_line = old_lines[old_index + i];
                             out.push_str(&format!(
                                 "<tr class='diff-deleted'>\
                                     <td class='diff-line-num'>{}</td><td class='diff-ss-left'>{}</td>\
@@ -3702,7 +3704,7 @@ fn render_diff(old: &[u8], new: &[u8], mode: &str) -> String {
                         new_index, new_len, ..
                     } => {
                         for i in 0..new_len {
-                            let new_line = diff.new_slices()[new_index + i];
+                            let new_line = new_lines[new_index + i];
                             out.push_str(&format!(
                                 "<tr class='diff-added'>\
                                     <td class='diff-line-num'></td><td class='diff-ss-left diff-ghost'></td>\
@@ -3720,8 +3722,8 @@ fn render_diff(old: &[u8], new: &[u8], mode: &str) -> String {
                     } => {
                         let common = old_len.min(new_len);
                         for i in 0..common {
-                            let old_line = diff.old_slices()[old_index + i];
-                            let new_line = diff.new_slices()[new_index + i];
+                            let old_line = old_lines[old_index + i];
+                            let new_line = new_lines[new_index + i];
                             out.push_str(&format!(
                                 "<tr>\
                                     <td class='diff-line-num diff-deleted'>{}</td><td class='diff-ss-left diff-deleted'>{}</td>\
@@ -3735,7 +3737,7 @@ fn render_diff(old: &[u8], new: &[u8], mode: &str) -> String {
                         }
                         if old_len > common {
                             for i in common..old_len {
-                                let old_line = diff.old_slices()[old_index + i];
+                                let old_line = old_lines[old_index + i];
                                 out.push_str(&format!(
                                     "<tr>\
                                         <td class='diff-line-num diff-deleted'>{}</td><td class='diff-ss-left diff-deleted'>{}</td>\
@@ -3747,7 +3749,7 @@ fn render_diff(old: &[u8], new: &[u8], mode: &str) -> String {
                             }
                         } else if new_len > common {
                             for i in common..new_len {
-                                let new_line = diff.new_slices()[new_index + i];
+                                let new_line = new_lines[new_index + i];
                                 out.push_str(&format!(
                                     "<tr>\
                                         <td class='diff-line-num'></td><td class='diff-ss-left diff-ghost'></td>\
@@ -4730,7 +4732,7 @@ async fn create_commit(
 
     let author = crate::commit::author();
 
-    if let Err(e) = crate::vcs::commit(&conn, &message, &author) {
+    if let Err(e) = crate::vcs::commit(&conn, &message, &author, "web") {
         return http_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             &format!("Commit failed: {}", e),
@@ -4756,7 +4758,7 @@ async fn todo_list(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 
     let _ = crate::todo::check_and_reset_todos(&conn);
 
-    let query = "SELECT id, title, status, IFNULL(assigned_to, 'Me'), IFNULL(due_date, 'No limit') FROM todos ORDER BY CASE WHEN status = 'DONE' THEN 1 ELSE 0 END, created_at DESC";
+    let query = "SELECT id, description, title, status, assigned_to, due_date FROM todos ORDER BY CASE WHEN status = 'DONE' THEN 1 ELSE 0 END, created_at DESC";
     let mut stmt = match conn.prepare(query) {
         Ok(s) => s,
         Err(_) => return http_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to prepare query"),
@@ -4765,10 +4767,11 @@ async fn todo_list(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let mut rows_html = String::new();
     while let Ok(sqlite::State::Row) = stmt.next() {
         let id: i64 = stmt.read(0).unwrap();
-        let title: String = stmt.read(1).unwrap();
-        let status: String = stmt.read(2).unwrap();
-        let assigned: String = stmt.read(3).unwrap();
-        let due_date: String = stmt.read(4).unwrap();
+        let description: String = stmt.read(1).unwrap();
+        let title: String = stmt.read(2).unwrap();
+        let status: String = stmt.read(3).unwrap();
+        let assigned: String = stmt.read(4).unwrap();
+        let due_date: String = stmt.read(5).unwrap();
 
         let status_class = match status.as_str() {
             "TODO" => "todo-pending",
@@ -4796,6 +4799,7 @@ async fn todo_list(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 <td>{}</td>\
                 <td><span class='todo-status {}'>{}</span></td>\
                 <td><strong>{}</strong></td>\
+                <td><strong>{}</strong></td>\
                 <td>{}</td>\
                 <td>{}</td>\
                 <td style='text-align: right;'>{}</td>\
@@ -4804,6 +4808,7 @@ async fn todo_list(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             status_class,
             status,
             html_escape(&title),
+            html_escape(&description),
             html_escape(&assigned),
             html_escape(&due_date),
             actions
@@ -4815,15 +4820,19 @@ async fn todo_list(State(state): State<Arc<AppState>>) -> impl IntoResponse {
          <div class='card' style='margin-bottom: 30px;'>\
            <h4>Add New Task</h4>\
            <form action='/todo/add' method='post' class='form-inline' style='align-items: flex-end;'>\
-             <div class='field' style='flex: 1; min-width: 200px;'>\
+             <div class='field' style='flex: 1; min-width: 150px;'>\
                <label>Title</label>\
                <input type='text' name='title' required>\
              </div>\
-             <div class='field'>\
+             <div class='field' style='flex: 1; min-width: 150px;'>\
+               <label>Description</label>\
+               <input type='text' name='description' required>\
+             </div>\
+             <div class='field' style='flex: 1; min-width: 150px;'>\
                <label>Assigned to</label>\
                <input type='text' name='assigned_to' placeholder='Me'>\
              </div>\
-             <div class='field'>\
+             <div class='field' style='flex: 1; min-width: 150px;'>\
                <label>Due Date</label>\
                <input type='date' name='due_date'>\
              </div>\
@@ -4836,6 +4845,7 @@ async fn todo_list(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                <th style='width: 40px;'>ID</th>\
                <th style='width: 100px;'>Status</th>\
                <th>Task</th>\
+               <th style='width: 150px;'>Description</th>\
                <th style='width: 150px;'>Assigned</th>\
                <th style='width: 150px;'>Due Date</th>\
                <th style='text-align: right; width: 200px;'>Actions</th>\

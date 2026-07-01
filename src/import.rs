@@ -314,6 +314,7 @@ pub fn import_from_git(
             time,
             &tree_hash_str,
             parent_hash.as_deref(),
+            "imported",
         )?;
         insert_manifest_for_commit(
             &conn,
@@ -526,6 +527,7 @@ pub fn import_from_git_and_purge(
             time,
             &tree_hash_str,
             parent_hash.as_deref(),
+            "imported",
         )?;
         insert_manifest_for_commit(
             &conn,
@@ -679,6 +681,7 @@ pub fn import_updates_from_repo(
             time,
             &tree_hash_str,
             parent_hash.as_deref(),
+            "imported",
         )?;
         insert_manifest_for_commit(
             &conn,

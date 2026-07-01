@@ -103,7 +103,7 @@ pub fn sync(destination_path: &str) -> Result<(), IoError> {
                 "{spinner:.white} [{elapsed_precise}] [{bar:40.white}] {pos}/{len} ({eta}) {msg}",
             )
             .expect("style fail")
-            .progress_chars("=>-"),
+            .progress_chars("=> "),
     );
 
     let x = Path::new(destination_path);
@@ -725,7 +725,8 @@ pub fn commit_manual(
     message: &str,
     author: &str,
     timestamp: i64,
-    tree_hash: &str, // Ajout du paramètre
+    tree_hash: &str,
+    ticket: &str,
 ) -> Result<i64, sqlite::Error> {
     let query_last = "SELECT hash FROM commits ORDER BY id DESC LIMIT 1";
     let mut stmt_last = conn.prepare(query_last)?;
@@ -739,8 +740,9 @@ pub fn commit_manual(
     } else {
         Some(parent_hash.as_str())
     };
-    let (id, _) =
-        commit_manual_with_parent(conn, message, author, timestamp, tree_hash, parent_ref)?;
+    let (id, _) = commit_manual_with_parent(
+        conn, message, author, timestamp, tree_hash, parent_ref, ticket,
+    )?;
     Ok(id)
 }
 
@@ -751,20 +753,23 @@ pub fn commit_manual_with_parent(
     timestamp: i64,
     tree_hash: &str,
     parent_hash: Option<&str>,
+    ticket: &str,
 ) -> Result<(i64, String), sqlite::Error> {
     let parent_for_hash = parent_hash.unwrap_or("");
     let commit_data = format!("{parent_for_hash}{author}{message}{timestamp}{tree_hash}");
     let lys_hash = blake3::hash(commit_data.as_bytes()).to_hex().to_string();
 
-    let query = "INSERT INTO commits (hash, parent_hash, tree_hash, author, message, timestamp) 
-                 VALUES (?, ?, ?, ?, ?, datetime(?, 'unixepoch'))";
+    let query =
+        "INSERT INTO commits (hash, parent_hash, tree_hash, author, message, ticket, timestamp) 
+                 VALUES (?, ?, ?, ?, ?, ?, datetime(?, 'unixepoch'))";
     let mut stmt = conn.prepare(query)?;
     stmt.bind((1, lys_hash.as_str()))?;
     stmt.bind((2, parent_hash))?;
     stmt.bind((3, tree_hash))?;
     stmt.bind((4, author))?;
     stmt.bind((5, message))?;
-    stmt.bind((6, timestamp))?;
+    stmt.bind((6, ticket))?;
+    stmt.bind((7, timestamp))?;
     stmt.next()?;
 
     let id_query = "SELECT last_insert_rowid()";
@@ -963,11 +968,17 @@ pub fn diff(conn: &Connection) -> Result<(), Error> {
                         ChangeTag::Insert => ("+ ", "\x1b[32m"), // Vert
                         ChangeTag::Equal => ("  ", "\x1b[37m"),  // Blanc
                     };
-                    lys_diff.push(format!("{}{}{}\x1b[0m", color, sign, change));
+                    if sign != "  " {
+                        lys_diff.push(format!("{}{}{}\x1b[0m", color, sign, change));
+                    }
                 }
             }
-            FileStatus::New(_path) => {}
-            FileStatus::Deleted(_path, _) => {}
+            FileStatus::New(_path) => {
+                //ok(format!("NEW {}", path.display()).as_str());
+            }
+            FileStatus::Deleted(_path, _) => {
+                //ok(format!("DELETED {}", path.display()).as_str());
+            }
             _ => {}
         }
     }
@@ -1133,8 +1144,8 @@ pub fn log(conn: &Connection, page: usize, per_page: usize) -> Result<(), sqlite
 
         let log = Log {
             author: stmt.read(1)?,
-            at: stmt.read(3)?,
             message: stmt.read(2)?,
+            at: stmt.read(3)?,
             signature: short_hash,
             changes,
         };
@@ -1256,7 +1267,7 @@ fn store_tree_recursive(
     }
 }
 
-pub fn commit(conn: &Connection, message: &str, author: &str) -> Result<(), Error> {
+pub fn commit(conn: &Connection, message: &str, author: &str, ticket: &str) -> Result<(), Error> {
     // 1. On scanne et on construit l'arbre en mémoire (Bottom-up)
     let mut root_tree = Node::Directory {
         children: BTreeMap::new(),
@@ -1307,16 +1318,17 @@ pub fn commit(conn: &Connection, message: &str, author: &str) -> Result<(), Erro
     let signature = sign_message(Path::new("."), &commit_hash).expect("aaa");
 
     let query_commit =
-        "INSERT INTO commits (hash, parent_hash, tree_hash, author, message, timestamp, signature)
-         VALUES (?, ?, ?, ?, ?, ?, ?)";
+        "INSERT INTO commits (hash, parent_hash, tree_hash, author, message, ticket, timestamp, signature)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
     let mut stmt = conn.prepare(query_commit)?;
     stmt.bind((1, commit_hash.as_str()))?;
     stmt.bind((2, parent_hash.as_str()))?;
     stmt.bind((3, root_hash.as_str()))?;
     stmt.bind((4, author))?;
     stmt.bind((5, message))?;
-    stmt.bind((6, timestamp.as_str()))?;
-    stmt.bind((7, signature.as_str()))?;
+    stmt.bind((6, ticket))?;
+    stmt.bind((7, timestamp.as_str()))?;
+    stmt.bind((8, signature.as_str()))?;
     stmt.next()?;
 
     // 4. On enregistre l'opération dans l'OpLog pour le Undo

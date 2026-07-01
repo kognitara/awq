@@ -1,5 +1,8 @@
+use crate::db::connect_lys;
+use crate::todo::{TodoItem, todos};
 use crate::utils::run_hooks;
 use chrono::Local;
+use crossterm::style::Stylize;
 use inquire::error::InquireResult;
 use inquire::{Confirm, Editor, InquireError, Select, Text};
 #[cfg(unix)]
@@ -11,9 +14,23 @@ use std::collections::HashMap;
 use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
 use std::io::Error;
+use std::path::Path;
+use tabled::builder::Builder;
+use tabled::settings::Style;
+use textwrap::{Options, wrap};
 
-pub const WHY_PROMPT: &str = "Explain the reason for this change";
-pub const HOW_PROMPT: &str = "Details the changes";
+#[doc = "First prompt to ask the user what is the objective of the changes"]
+pub const WHAT: &str = "What is the objective of the changes?";
+
+#[doc = "First prompt to ask the user who is the objective of the changes"]
+pub const WHO: &str = "";
+pub const WHERE: &str = "";
+pub const WHEN: &str = "";
+
+pub const HOW: &str = "How the changes were made and what was changed?";
+pub const WHY: &str =
+    "Why is the objective of the changes important and what is the expected outcome?";
+
 pub const SUBJECT_PROMPT: &str = "Summary of changes";
 pub const OUTCOME_PROMPT: &str = "Outcome of changes";
 
@@ -356,6 +373,87 @@ pub fn get_space_themes() -> HashMap<CommitCategory, Vec<CommitType>> {
     themes
 }
 
+pub enum Level {
+    Low,
+    Medium,
+    High,
+}
+
+fn ago(timestamp: &str) -> String {
+    if let Ok(parsed_time) = chrono::DateTime::parse_from_rfc3339(timestamp) {
+        let now = Local::now();
+        let duration = now.signed_duration_since(parsed_time.with_timezone(&Local));
+        if duration.num_seconds() < 60 {
+            format!("{} seconds ago", duration.num_seconds())
+        } else if duration.num_minutes() < 60 {
+            format!("{} minutes ago", duration.num_minutes())
+        } else if duration.num_hours() < 24 {
+            format!("{} hours ago", duration.num_hours())
+        } else if duration.num_days() < 30 {
+            format!("{} days ago", duration.num_days())
+        } else if duration.num_days() < 365 {
+            format!("{} months ago", duration.num_days() / 30)
+        } else {
+            format!("{} years ago", duration.num_days() / 365)
+        }
+    } else {
+        String::new()
+    }
+}
+
+fn file_stats(
+    f: &mut Formatter,
+    prefix: &str,
+    connector: &str,
+    file: &str,
+    added: usize,
+    deleted: usize,
+) -> std::fmt::Result {
+    let total = added + deleted;
+    const MAX_BAR_WIDTH: usize = 40; // La largeur maximale de ta barre de stats
+
+    // Calcul du nombre de '+' et de '-' à afficher
+    let (display_added, display_deleted) = if total > MAX_BAR_WIDTH {
+        let factor = MAX_BAR_WIDTH as f64 / total as f64;
+        let mut a = (added as f64 * factor).round() as usize;
+        let mut d = (deleted as f64 * factor).round() as usize;
+
+        // Sécurité pour corriger les micro-erreurs d'arrondi des f64
+        while a + d > MAX_BAR_WIDTH {
+            if a > d {
+                a -= 1;
+            } else {
+                d -= 1;
+            }
+        }
+
+        // Sécurité visuelle : si on a des ajouts/suppressions, on affiche au moins un caractère
+        if a == 0 && added > 0 {
+            a = 1;
+        }
+        if d == 0 && deleted > 0 {
+            d = 1;
+        }
+
+        (a, d)
+    } else {
+        // Si ça rentre largement, on garde les vraies valeurs
+        (added, deleted)
+    };
+
+    writeln!(
+        f,
+        "{prefix}{connector} {} {} {} {}{}",
+        file.white().bold(),
+        added.to_string().white(),
+        deleted.to_string().white(),
+        "+".repeat(display_added).green().bold(),
+        "-".repeat(display_deleted).red().bold()
+    )?;
+
+    Ok(())
+}
+
 pub struct Log {
     pub author: String,
     pub message: String,
@@ -366,10 +464,24 @@ pub struct Log {
 
 impl Display for Log {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let x = self.author.split("<").collect::<Vec<&str>>();
-        let author = x[0].trim().to_string();
-        writeln!(f, "\n{author} at {} ({})\n", self.at, self.signature)?;
-        writeln!(f, "\n{}\n", self.message)?;
+        let mut tx = Builder::new();
+        tx.push_record(["Author", "Ago", "Signature"]);
+        let when = ago(&self.at.as_str());
+        let when_display = if when.is_empty() {
+            self.at.as_str()
+        } else {
+            when.as_str()
+        };
+        writeln!(f)?;
+        tx.push_record([self.author.as_str(), when_display, self.signature.as_str()]);
+        writeln!(f, "{}", tx.build().with(Style::modern()).to_string())?;
+        writeln!(
+            f,
+            "\n{}\n\n.\n├── {} {}",
+            self.message.trim(),
+            "h".white(),
+            self.signature.to_string().white().bold()
+        )?;
 
         if !self.changes.is_empty() {
             let mut root = Tree::default();
@@ -418,14 +530,30 @@ fn print_tree(f: &mut Formatter<'_>, node: &Tree, prefix: &str, is_root: bool) -
         let connector = if is_last { "└──" } else { "├──" };
         if child.is_file {
             // Affiche le marqueur et les compteurs
-            let marker = match &child.change {
+            let marker: (String, usize, usize) = match &child.change {
                 Some(FileChange::Added { added, mode }) => {
                     let m = mode.map(|v| crate::vcs::format_mode(v)).unwrap_or_default();
-                    format!("{m} + {added}")
+                    (
+                        format!(
+                            "{} {}",
+                            m.white().bold().to_string(),
+                            name.clone().white().to_string()
+                        ),
+                        added.clone(),
+                        0,
+                    )
                 }
                 Some(FileChange::Deleted { deleted, mode }) => {
                     let m = mode.map(|v| crate::vcs::format_mode(v)).unwrap_or_default();
-                    format!("{m} - {deleted}")
+                    (
+                        format!(
+                            "{} {}",
+                            m.white().bold().to_string(),
+                            name.clone().white().bold().to_string()
+                        ),
+                        0,
+                        deleted.clone(),
+                    )
                 }
                 Some(FileChange::Modified {
                     added,
@@ -433,13 +561,25 @@ fn print_tree(f: &mut Formatter<'_>, node: &Tree, prefix: &str, is_root: bool) -
                     mode,
                 }) => {
                     let m = mode.map(|v| crate::vcs::format_mode(v)).unwrap_or_default();
-                    format!("{m} ~ +{added} -{deleted}")
+                    (
+                        format!(
+                            "{} {}",
+                            m.white().bold().to_string(),
+                            name.clone().white().to_string()
+                        ),
+                        added.clone(),
+                        deleted.clone(),
+                    )
                 }
-                _ => String::new(),
+                _ => (String::new(), 0, 0),
             };
-            writeln!(f, "{prefix}{connector} {marker} {name}")?;
+            file_stats(f, prefix, connector, marker.0.as_str(), marker.1, marker.2)?;
         } else {
-            writeln!(f, "{prefix}{connector} {name}")?;
+            writeln!(
+                f,
+                "{prefix}{connector} {}",
+                name.to_string().blue().bold().to_string()
+            )?;
         }
         let new_prefix = if is_last {
             format!("{}    ", prefix)
@@ -486,6 +626,17 @@ pub fn author() -> String {
                 }
             }
         }
+
+        let mut stmt = conn
+            .prepare("SELECT value FROM config WHERE key = 'name'")
+            .unwrap();
+        if let Ok(sqlite::State::Row) = stmt.next() {
+            if let Ok(val) = stmt.read::<String, _>(0) {
+                if !val.trim().is_empty() {
+                    return val;
+                }
+            }
+        }
     }
 
     // 2. Fallback : Identité système originale si la DB est vide
@@ -510,6 +661,7 @@ pub struct Commit {
     pub category: CommitCategory,
     pub types: CommitType,
     pub os: String,
+    pub ticket: TodoItem,
     pub os_release: String,
     pub os_version: String,
     pub os_domain: String,
@@ -532,21 +684,78 @@ impl Display for Commit {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let x = self.types.to_string();
         let t = x.split(":");
+        let options = Options::new(80)
+            .initial_indent("    ")
+            .subsequent_indent("    ")
+            .width(70);
+        // colorless output for non-terminal environments (like CI/CD pipelines)
         writeln!(
             f,
             "\n{}: {}\n",
             t.last().expect("").trim().to_string(),
             self.summary
         )?;
-        writeln!(f, "What?\n\n{}\n", self.what)?;
-        writeln!(f, "Why?\n\n{}\n", self.why)?;
-        writeln!(f, "How?\n\n{}\n", self.how)?;
-        writeln!(f, "Breaking Changes?\n\n{}\n", self.breaking_changes)?;
-        writeln!(
-            f,
-            "Commited on {} {} {}\n",
-            self.os, self.os_release, self.arch
-        )?;
+        writeln!(f)?;
+        writeln!(f, "What?")?;
+        writeln!(f)?;
+        for line in self.what.lines() {
+            // Si la ligne est trop longue, textwrap la découpe en respectant les mots
+            for wrapped_line in wrap(line, &options) {
+                writeln!(f, "{wrapped_line}")?;
+            }
+        }
+        writeln!(f)?;
+
+        writeln!(f)?;
+        writeln!(f, "Why?")?;
+        writeln!(f)?;
+        for line in self.why.lines() {
+            // Si la ligne est trop longue, textwrap la découpe en respectant les mots
+            for wrapped_line in wrap(line, &options) {
+                writeln!(f, "{wrapped_line}")?;
+            }
+        }
+        writeln!(f)?;
+        writeln!(f, "How?")?;
+        writeln!(f)?;
+        for line in self.how.lines() {
+            // Si la ligne est trop longue, textwrap la découpe en respectant les mots
+            for wrapped_line in wrap(line, &options) {
+                writeln!(f, "{wrapped_line}")?;
+            }
+        }
+        writeln!(f)?;
+        writeln!(f, "Breaking Changes?")?;
+        writeln!(f)?;
+        for line in self.breaking_changes.lines() {
+            for wrapped_line in wrap(line, &options) {
+                writeln!(f, "{wrapped_line}")?;
+            }
+        }
+        writeln!(f)?;
+        let mut t = Builder::new();
+        t.push_record(["OS", "Release", "Arch"]);
+        t.push_record([
+            self.os.as_str(),
+            self.os_release.as_str(),
+            self.arch.as_str(),
+        ]);
+        writeln!(f)?;
+        writeln!(f, "{}", t.build().with(Style::modern()).to_string())?;
+        writeln!(f)?;
+
+        let mut tx = Builder::new();
+        tx.push_record(["Ticket", "Title", "Description"]);
+        tx.push_record([
+            self.ticket.id.to_string(),
+            self.ticket.title.to_string(),
+            self.ticket.description.to_string(),
+        ]);
+
+        writeln!(f)?;
+        writeln!(f, "{}", tx.build().with(Style::modern()).to_string())?;
+        writeln!(f)?;
+
         Ok(())
     }
 }
@@ -561,13 +770,13 @@ impl Commit {
     ///
     /// Bad user or cancel by user
     ///
-    pub fn confirm(&mut self) -> InquireResult<&mut Self> {
+    pub fn confirm(&mut self) -> InquireResult<TodoItem> {
         println!("{self}");
         if Confirm::new("Confirm Commit?")
             .with_default(true)
             .prompt()?
         {
-            Ok(self)
+            Ok(self.ticket.clone())
         } else if Confirm::new("Change Commit Message?")
             .with_default(false)
             .prompt()?
@@ -577,6 +786,16 @@ impl Commit {
             Err(InquireError::from(Error::other("commit aborted")))
         }
     }
+    pub fn ask_ticket(&mut self) -> InquireResult<&mut Self> {
+        let x = todos(&connect_lys(Path::new(".")).expect("msg")).expect("failed to get todos");
+        if x.is_empty() {
+            return Err(InquireError::from(Error::other(
+                "No tickets found. Please create a ticket first.",
+            )));
+        }
+        self.ticket = Select::new("Resolves ticket:", x.clone()).prompt()?;
+        Ok(self)
+    }
     ///
     /// Commit the changes to the repository
     ///
@@ -584,16 +803,17 @@ impl Commit {
     ///
     /// On bad user inputs
     ///
-    pub fn commit(&mut self) -> InquireResult<&mut Self> {
+    pub fn commit(&mut self) -> InquireResult<TodoItem> {
         if run_hooks().is_ok() {
-            self.ask_category()?
+            self.ask_ticket()?
+                .ask_category()?
                 .ask_types()?
                 .ask_summary()?
-                .ask_why()?
                 .ask_what()?
                 .ask_how()?
                 .ask_benefits()?
                 .ask_breaking()?
+                .ask_why()?
                 .human_and_system()?
                 .confirm()
         } else {
@@ -650,7 +870,7 @@ impl Commit {
         while self.breaking_changes.is_empty() {
             self.breaking_changes.clear();
             self.breaking_changes
-                .push_str(Text::new("Breaking Changes?").prompt()?.as_str());
+                .push_str(Editor::new("Breaking Changes?").prompt()?.as_str());
         }
         if self.breaking_changes.is_empty() {
             return Err(InquireError::from(Error::other("bad changes")));
@@ -669,8 +889,7 @@ impl Commit {
         self.what.clear();
         while self.what.is_empty() {
             self.what.clear();
-            self.what
-                .push_str(Editor::new("What changes?").prompt()?.as_str());
+            self.what.push_str(Editor::new(WHAT).prompt()?.as_str());
         }
         if self.what.is_empty() {
             return Err(InquireError::from(Error::other("bad what")));
@@ -689,8 +908,7 @@ impl Commit {
         self.why.clear();
         while self.why.is_empty() {
             self.why.clear();
-            self.why
-                .push_str(Editor::new(WHY_PROMPT).prompt()?.as_str());
+            self.why.push_str(Editor::new(WHY).prompt()?.as_str());
         }
         if self.why.is_empty() {
             return Err(InquireError::from(Error::other("bad why")));
@@ -709,11 +927,10 @@ impl Commit {
         self.how.clear();
         while self.how.is_empty() {
             self.how.clear();
-            self.how
-                .push_str(Editor::new(HOW_PROMPT).prompt()?.as_str());
+            self.how.push_str(Editor::new(HOW).prompt()?.as_str());
         }
-        if self.why.is_empty() {
-            return Err(InquireError::from(Error::other("bad why")));
+        if self.how.is_empty() {
+            return Err(InquireError::from(Error::other("bad how")));
         }
         Ok(self)
     }
@@ -779,7 +996,7 @@ impl Commit {
                 .push_str(Editor::new(OUTCOME_PROMPT).prompt()?.as_str());
         }
         if self.outcome.is_empty() {
-            return Err(InquireError::from(Error::other("bad benefits")));
+            return Err(InquireError::from(Error::other("bad outcome")));
         }
         Ok(self)
     }
