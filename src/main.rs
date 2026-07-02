@@ -29,8 +29,8 @@ use inquire::{DateSelect, Password};
 use sqlite::State;
 use std::env::current_dir;
 use std::fmt::Display;
-use std::fs::File;
 use std::fs::read_to_string;
+use std::fs::{File, remove_dir_all};
 use std::io::{Error, Write, stdout};
 use std::path::MAIN_SEPARATOR_STR;
 use std::path::Path;
@@ -216,6 +216,16 @@ fn cli() -> Command {
                         .help("Branch, tag or commit hash to mount (default: current HEAD)")
                         .action(ArgAction::Set),
                 ),
+        )
+        .subcommand(
+            Command::new("unmount")
+                .about("Unmount a mounted directory")
+                .arg(
+                    Arg::new("target")
+                        .help("The mount point (e.g., /mnt/lys_project)")
+                        .required(true)
+                        .action(ArgAction::Set),
+                )
         )
         .subcommand(
             Command::new("tree").about("Show repository").arg(
@@ -1078,6 +1088,10 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
             vcs::mount_version(&conn, target, reference.map(|s| s.as_str()))
                 .map_err(|e| Error::other(e.to_string()))
         }
+        Some(("unmount", sub_args)) => {
+            let target = sub_args.get_one::<String>("target").unwrap();
+            vcs::unmount_version(target).map_err(|e| Error::other(e.to_string()))
+        }
         Some(("shell", sub_args)) => {
             let reference = sub_args.get_one::<String>("ref").map(|s| s.as_str());
             let current_dir = current_dir()?;
@@ -1085,6 +1099,41 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
             vcs::spawn_lys_shell(&conn, reference).map_err(|e| Error::other(e.to_string()))
         }
         Some(("init", _)) => {
+            let current_dir = current_dir()?;
+            let path_str = current_dir.to_str().unwrap();
+            if connect_lys(Path::new(path_str))
+                .expect("fail")
+                .execute(LYS_INIT)
+                .is_ok()
+            {
+                generate_keypair(Path::new(path_str)).expect("failed to generate keys");
+                ok("Initialized empty lys repository");
+                Ok(())
+            } else {
+                Err(Error::other("Failed to init"))
+            }
+        }
+        Some(("reinit", _)) => {
+            if Path::new(".lys").exists() {
+                let ans = inquire::Confirm::new("Are you sure you want to reinitialize the repository? This will delete the existing .lys directory.")
+                    .with_help_message("This action will PERMANENTLY delete the existing .lys directory and all its contents.")
+                    .with_default(false)
+                    .prompt();
+                match ans {
+                    Ok(true) => {
+                        remove_dir_all(".lys")?;
+                        ok("Existing .lys directory removed.");
+                    }
+                    Ok(false) => {
+                        ok("Reinitialization cancelled.");
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        ko("Error during confirmation. Reinitialization aborted.");
+                        return Ok(());
+                    }
+                }
+            }
             let current_dir = current_dir()?;
             let path_str = current_dir.to_str().unwrap();
             if connect_lys(Path::new(path_str))

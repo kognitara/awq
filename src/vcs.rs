@@ -612,6 +612,23 @@ pub fn mount_version(
     Ok(())
 }
 
+pub fn unmount_version(target_path: &str) -> Result<(), Error> {
+    let target = Path::new(target_path);
+
+    // Vérifications de sécurité
+    if !target.exists() {
+        return Err(anyhow::anyhow!("Directory does not exist."));
+    }
+
+    if !target.is_dir() {
+        return Err(anyhow::anyhow!("target_path must be a directory"));
+    }
+    // Suppression du contenu
+    std::fs::remove_dir_all(target)?;
+    ok(format!("Version unmounted and {target_path} cleaned up.").as_str());
+    Ok(())
+}
+
 fn copy_dir_recursive(src: &Path, dst: &Path) -> IoResult<()> {
     if !dst.exists() {
         create_dir_all(dst)?;
