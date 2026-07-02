@@ -2,9 +2,10 @@ use crate::db::connect_lys;
 use crate::todo::{TodoItem, todos};
 use crate::utils::run_hooks;
 use chrono::Local;
-use crossterm::style::Stylize;
+use crossterm::style::{Color, Stylize};
 use inquire::error::InquireResult;
 use inquire::{Confirm, Editor, InquireError, Select, Text};
+use justify::{Settings, justify};
 #[cfg(unix)]
 use nix::sys::utsname::uname;
 #[cfg(unix)]
@@ -17,7 +18,6 @@ use std::io::Error;
 use std::path::Path;
 use tabled::builder::Builder;
 use tabled::settings::Style;
-use textwrap::{Options, wrap};
 
 #[doc = "First prompt to ask the user what is the objective of the changes"]
 pub const WHAT: &str = "What is the objective of the changes?";
@@ -464,23 +464,24 @@ pub struct Log {
 
 impl Display for Log {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut tx = Builder::new();
-        tx.push_record(["Author", "Ago", "Signature"]);
         let when = ago(&self.at.as_str());
         let when_display = if when.is_empty() {
             self.at.as_str()
         } else {
             when.as_str()
         };
-        writeln!(f)?;
+
+        let mut tx = Builder::new();
+        tx.push_record(["Author", "Date", "Signature"]);
         tx.push_record([self.author.as_str(), when_display, self.signature.as_str()]);
+        writeln!(f)?;
         writeln!(f, "{}", tx.build().with(Style::modern()).to_string())?;
+        writeln!(f, "{}\n", self.message.to_string().white().bold())?;
         writeln!(
             f,
-            "\n{}\n\n.\n├── {} {}",
-            self.message.trim(),
-            "h".white(),
-            self.signature.to_string().white().bold()
+            "\n.\n├── {} {}",
+            "h".white().bold(),
+            self.signature.to_string().white()
         )?;
 
         if !self.changes.is_empty() {
@@ -536,8 +537,8 @@ fn print_tree(f: &mut Formatter<'_>, node: &Tree, prefix: &str, is_root: bool) -
                     (
                         format!(
                             "{} {}",
-                            m.white().bold().to_string(),
-                            name.clone().white().to_string()
+                            m.white().to_string(),
+                            name.clone().white().bold().to_string()
                         ),
                         added.clone(),
                         0,
@@ -548,7 +549,7 @@ fn print_tree(f: &mut Formatter<'_>, node: &Tree, prefix: &str, is_root: bool) -
                     (
                         format!(
                             "{} {}",
-                            m.white().bold().to_string(),
+                            m.white().to_string(),
                             name.clone().white().bold().to_string()
                         ),
                         0,
@@ -564,8 +565,8 @@ fn print_tree(f: &mut Formatter<'_>, node: &Tree, prefix: &str, is_root: bool) -
                     (
                         format!(
                             "{} {}",
-                            m.white().bold().to_string(),
-                            name.clone().white().to_string()
+                            m.white().to_string(),
+                            name.clone().white().bold().to_string()
                         ),
                         added.clone(),
                         deleted.clone(),
@@ -679,83 +680,67 @@ pub struct Commit {
     pub impact: String,
     pub breaking_changes: String,
 }
-
+pub fn format_justified(text: &str) -> String {
+    justify(
+        text,
+        &Settings {
+            width: 70,
+            wcwidth: true,
+            hyphenate_overflow: true,
+            justify_last_line: false,
+            insert_at: justify::InsertAt::Left,
+            ignore_spaces: false,
+            newline: "\n",
+            hyphen: "-",
+            separator: " ",
+        },
+    )
+}
 impl Display for Commit {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let x = self.types.to_string();
-        let t = x.split(":");
-        let options = Options::new(80)
-            .initial_indent("    ")
-            .subsequent_indent("    ")
-            .width(70);
-        // colorless output for non-terminal environments (like CI/CD pipelines)
-        writeln!(
-            f,
-            "\n{}: {}\n",
-            t.last().expect("").trim().to_string(),
-            self.summary
-        )?;
-        writeln!(f)?;
-        writeln!(f, "What?")?;
-        writeln!(f)?;
-        for line in self.what.lines() {
-            // Si la ligne est trop longue, textwrap la découpe en respectant les mots
-            for wrapped_line in wrap(line, &options) {
-                writeln!(f, "{wrapped_line}")?;
-            }
-        }
-        writeln!(f)?;
-
-        writeln!(f)?;
-        writeln!(f, "Why?")?;
-        writeln!(f)?;
-        for line in self.why.lines() {
-            // Si la ligne est trop longue, textwrap la découpe en respectant les mots
-            for wrapped_line in wrap(line, &options) {
-                writeln!(f, "{wrapped_line}")?;
-            }
-        }
-        writeln!(f)?;
-        writeln!(f, "How?")?;
-        writeln!(f)?;
-        for line in self.how.lines() {
-            // Si la ligne est trop longue, textwrap la découpe en respectant les mots
-            for wrapped_line in wrap(line, &options) {
-                writeln!(f, "{wrapped_line}")?;
-            }
-        }
-        writeln!(f)?;
-        writeln!(f, "Breaking Changes?")?;
-        writeln!(f)?;
-        for line in self.breaking_changes.lines() {
-            for wrapped_line in wrap(line, &options) {
-                writeln!(f, "{wrapped_line}")?;
-            }
-        }
-        writeln!(f)?;
+        let tp = x.split(":");
         let mut t = Builder::new();
-        t.push_record(["OS", "Release", "Arch"]);
+        t.push_record(["OS", "Release", "Arch", "Ticket", "Title", "Description"]);
         t.push_record([
             self.os.as_str(),
             self.os_release.as_str(),
             self.arch.as_str(),
+            self.ticket.id.to_string().as_str(),
+            self.ticket.title.to_string().as_str(),
+            self.ticket.description.to_string().as_str(),
         ]);
         writeln!(f)?;
         writeln!(f, "{}", t.build().with(Style::modern()).to_string())?;
         writeln!(f)?;
-
-        let mut tx = Builder::new();
-        tx.push_record(["Ticket", "Title", "Description"]);
-        tx.push_record([
-            self.ticket.id.to_string(),
-            self.ticket.title.to_string(),
-            self.ticket.description.to_string(),
-        ]);
+        // colorless output for non-terminal environments (like CI/CD pipelines)
+        writeln!(
+            f,
+            "\n{}: {}\n",
+            tp.last().expect("").trim().to_string().cyan().bold(),
+            self.summary
+        )?;
+        writeln!(f)?;
+        writeln!(f, "{}", "What?".with(Color::Cyan).bold())?;
+        writeln!(f)?;
+        writeln!(f, "{}", format_justified(self.what.as_str()).white())?;
 
         writeln!(f)?;
-        writeln!(f, "{}", tx.build().with(Style::modern()).to_string())?;
+        writeln!(f, "{}", "Why?".with(Color::Cyan).bold())?;
         writeln!(f)?;
-
+        writeln!(f, "{}", format_justified(self.why.as_str()).white())?;
+        writeln!(f)?;
+        writeln!(f, "{}", "How?".with(Color::Cyan).bold())?;
+        writeln!(f)?;
+        writeln!(f, "{}", format_justified(self.how.as_str()).white())?;
+        writeln!(f)?;
+        writeln!(f, "{}", "Breaking Changes?".with(Color::Cyan).bold())?;
+        writeln!(f)?;
+        writeln!(
+            f,
+            "{}",
+            format_justified(self.breaking_changes.as_str()).white()
+        )?;
         Ok(())
     }
 }
