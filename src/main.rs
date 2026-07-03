@@ -23,7 +23,7 @@ use clap::{Arg, ArgAction, Command};
 use crossterm::cursor::MoveTo;
 use crossterm::execute;
 use crossterm::terminal::{Clear, ClearType};
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use inquire::{Confirm, Editor, Select, Text};
 use inquire::{DateSelect, Password};
 use sqlite::State;

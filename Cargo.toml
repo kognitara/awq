@@ -45,11 +45,11 @@ once_cell = "1.19.0"
 qr2term = "0.3.3"
 serde_yaml = "0.9.34"
 lettre = { version = "0.11.19", features = ["tokio1", "tokio1-native-tls"] }
-dotenv = "0.15.0"
 tar = "0.4.45"
 flate2 = "1.1.9"
 rand_core = "0.10.1"
 justify = { version = "0.1.3", features = ["unicode-width"] }
+dotenvy = "0.15.7"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31.1", features = [
