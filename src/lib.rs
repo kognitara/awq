@@ -1,1 +1,2 @@
-pub mod dbs;
+pub mod email;
+pub mod utils;
