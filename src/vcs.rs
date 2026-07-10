@@ -1500,6 +1500,7 @@ pub fn status(conn: &Connection, root_path: &str, branch: &str) -> Result<Vec<Fi
         .add_custom_ignore_filename("syl")
         .threads(4)
         .standard_filters(true)
+        .hidden(false)
         .build()
         .flatten()
         .collect::<Vec<DirEntry>>();
