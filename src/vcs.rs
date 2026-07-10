@@ -353,9 +353,11 @@ fn last_commit_for_path_cli(
         let h = stmt.read::<String, _>(0).ok()?;
         let ts = stmt.read::<String, _>(1).ok()?;
         let msg = stmt.read::<String, _>(2).ok()?;
-        // Ne garder que la première ligne du message
-        let first_line = msg.lines().next().unwrap_or("").to_string();
-        Some((h, ts, first_line))
+
+        // On cherche la première ligne qui n'est ni vide, ni une bordure du tableau ASCII
+        let mut first_line = msg.lines();
+        let l = first_line.next().expect("no summary").to_string();
+        Some((h, ts, l))
     } else {
         None
     }
@@ -374,7 +376,7 @@ fn ls_tree_recursive(
         SELECT t.name, t.hash, c.message, c.timestamp 
         FROM tree_nodes t
         LEFT JOIN commits c ON c.tree_hash = t.hash
-        WHERE t.parent_tree_hash = ?1
+        WHERE t.parent_tree_hash = ?
     ",
     )?;
     stmt.bind((1, tree_hash))?;
@@ -383,7 +385,6 @@ fn ls_tree_recursive(
         entries.push((
             stmt.read::<String, _>("name")?,
             stmt.read::<String, _>("hash")?,
-            stmt.read::<i64, _>("mode")?,
         ));
     }
     entries.sort_by(|a, b| {
@@ -399,7 +400,7 @@ fn ls_tree_recursive(
         }
     });
     let count = entries.len();
-    for (i, (name, hash, _mode)) in entries.into_iter().enumerate() {
+    for (i, (name, hash)) in entries.into_iter().enumerate() {
         let is_last = i == count - 1;
         let connector = if is_last { "└── " } else { "├── " };
         let is_dir = is_directory(conn, &hash)?;
@@ -408,7 +409,6 @@ fn ls_tree_recursive(
         } else {
             format!("{current_path}{MAIN_SEPARATOR_STR}{name}")
         };
-
         let mut commit_info = String::new();
         let mut commit_hash_str = "       ".to_string(); // 7 spaces placeholder
         if let Some((h, ts, msg)) =
@@ -421,7 +421,13 @@ fn ls_tree_recursive(
             } else {
                 msg.clone()
             };
-            commit_info = format!(" {truncated_msg} ({age})");
+            commit_info = format!(
+                " {} {} {} {}",
+                truncated_msg.white().bold(),
+                "(".white().bold(),
+                age.magenta(),
+                ")".white().bold()
+            );
         }
         let icon = FileIcon::from(current_path.as_str());
         lines.push(format!(
@@ -433,15 +439,15 @@ fn ls_tree_recursive(
             },
             &hash[0..7].green(),
             commit_hash_str.yellow(),
-            prefix.white(),
-            connector.white(),
+            prefix.dark_grey().bold(),
+            connector.dark_grey().bold(),
             icon.icon.to_string().white(),
             if is_dir {
                 name.clone().blue().to_string()
             } else {
-                name.clone().dark_cyan().to_string()
+                name.clone().dark_magenta().to_string()
             },
-            commit_info.dark_grey(),
+            commit_info,
         ));
         // Si le hash possède lui-même des enfants dans tree_nodes, c'est un dossier
         if is_dir {

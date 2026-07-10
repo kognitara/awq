@@ -766,29 +766,18 @@ pub fn format_justified(text: &str) -> String {
 }
 impl Display for Commit {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let x = self.types.to_string();
-        let tp = x.split(":");
-        let mut t = Builder::new();
-        t.push_record(["OS", "Release", "Arch", "Ticket", "Title", "Description"]);
-        t.push_record([
-            self.os.as_str(),
-            self.os_release.as_str(),
-            self.arch.as_str(),
-            self.ticket.id.to_string().as_str(),
-            self.ticket.title.to_string().as_str(),
-            self.ticket.description.to_string().as_str(),
-        ]);
+        writeln!(f, "{}\n", format_args!("{}", self.summary.trim_end()))?;
         writeln!(f)?;
-        writeln!(f, "{}", t.build().with(Style::modern()))?;
+        writeln!(f, "Fixes : {}", self.ticket.id)?;
+        writeln!(f, "Title : {}", self.ticket.title)?;
+        writeln!(f, "Descr : {}", self.ticket.description)?;
         writeln!(f)?;
         writeln!(
             f,
-            "{}\n",
-            format_args!(
-                "{} - {}",
-                tp.last().expect("").trim(),
-                self.summary.trim_end()
-            ),
+            "Os    : {} {} {}",
+            self.os.as_str(),
+            self.os_release,
+            self.arch
         )?;
         writeln!(f)?;
         writeln!(f, "{}", "What?".bold())?;
