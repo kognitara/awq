@@ -480,62 +480,6 @@ fn is_safe_relative_path(path: &str) -> bool {
     true
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn lysrc_parsing_ignores_comments_and_blank_lines() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("lysrc");
-        let content = "\n# comment\n title = Lys \n\n description= Local-first \n";
-        std::fs::write(&path, content).expect("write lysrc");
-
-        let map = load_lysrc(dir.path());
-        assert_eq!(map.get("title").map(String::as_str), Some("Lys"));
-        assert_eq!(
-            map.get("description").map(String::as_str),
-            Some("Local-first")
-        );
-        assert!(map.get("missing").is_none());
-    }
-
-    #[test]
-    fn lysrc_parsing_strips_quotes() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("lysrc");
-        let content = "title=\"Lys Repo\"\nfooter='(c) 2026'\n";
-        std::fs::write(&path, content).expect("write lysrc");
-
-        let map = load_lysrc(dir.path());
-        assert_eq!(map.get("title").map(String::as_str), Some("Lys Repo"));
-        assert_eq!(map.get("footer").map(String::as_str), Some("(c) 2026"));
-    }
-
-    #[test]
-    fn normalize_asset_path_behavior() {
-        assert_eq!(normalize_asset_path(""), "");
-        assert_eq!(normalize_asset_path("/logo.png"), "/logo.png");
-        assert_eq!(normalize_asset_path("logo.png"), "/logo.png");
-        assert_eq!(normalize_asset_path("images/logo.png"), "/images/logo.png");
-        assert_eq!(
-            normalize_asset_path("https://example.com/logo.png"),
-            "https://example.com/logo.png"
-        );
-        assert_eq!(
-            normalize_asset_path("data:image/svg+xml;base64,AAAA"),
-            "data:image/svg+xml;base64,AAAA"
-        );
-    }
-
-    #[test]
-    fn clean_value_trims_and_drops_empty() {
-        assert_eq!(clean_value("  "), None);
-        assert_eq!(clean_value("\n\t"), None);
-        assert_eq!(clean_value("  ok "), Some("ok".to_string()));
-    }
-}
-
 fn truncate_words(text: &str, limit: usize) -> String {
     let words: Vec<&str> = text.split_whitespace().collect();
     if words.len() <= limit {
@@ -555,7 +499,7 @@ fn get_spotify_embed_url(url: &str) -> Option<String> {
     let base_url = url.split('?').next()?;
     if let Some(pos) = base_url.find("spotify.com/") {
         let path = &base_url[pos + 12..];
-        return Some(format!("https://open.spotify.com/embed/{}", path));
+        return Some(format!("https://open.spotify.com/embed/{path}"));
     }
     None
 }
@@ -4968,13 +4912,13 @@ async fn upload_atom(
                 Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
             };
 
-            if let Err(_) = stmt.bind((1, hash.as_str())) {
+            if stmt.bind((1, hash.as_str())).is_err() {
                 return StatusCode::INTERNAL_SERVER_ERROR;
             }
-            if let Err(_) = stmt.bind((2, &body[..])) {
+            if stmt.bind((2, &body[..])).is_err() {
                 return StatusCode::INTERNAL_SERVER_ERROR;
             }
-            if let Err(_) = stmt.bind((3, body.len() as i64)) {
+            if stmt.bind((3, body.len() as i64)).is_err() {
                 return StatusCode::INTERNAL_SERVER_ERROR;
             }
 

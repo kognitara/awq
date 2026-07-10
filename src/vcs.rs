@@ -652,10 +652,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> IoResult<()> {
 fn ensure_empty_dir(path: &Path) -> IoResult<()> {
     if path.exists() {
         if path.read_dir()?.next().is_some() {
-            return Err(IoError::new(
-                std::io::ErrorKind::Other,
-                "target path must be empty",
-            ));
+            return Err(IoError::other("target path must be empty"));
         }
     } else {
         create_dir_all(path)?;
@@ -803,7 +800,7 @@ pub fn hotfix_start(conn: &Connection, name: &str) -> Result<(), Error> {
     // 1. On vérifie qu'on part bien de 'main' pour avoir la base saine
     let (main_id, _) = get_branch_head_info(conn, source_branch)?;
     if main_id.is_none() {
-        return Err(anyhow::anyhow!("No main branches has been founded").into());
+        return Err(anyhow::anyhow!("No main branches has been founded"));
     }
 
     // 2. On crée la branche manuellement (sans utiliser create_branch qui utilise HEAD)
@@ -969,7 +966,7 @@ pub fn diff(conn: &Connection) -> Result<(), Error> {
                 // B. Récupérer les octets depuis le HEAD
                 let old_bytes = get_blob_bytes(conn, &branch, &path)?.unwrap_or_default();
 
-                let is_binary = |buf: &[u8]| buf.iter().any(|b| *b == 0);
+                let is_binary = |buf: &[u8]| buf.contains(&0);
                 if is_binary(&new_bytes) || is_binary(&old_bytes) {
                     continue;
                 }

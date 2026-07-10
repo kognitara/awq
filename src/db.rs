@@ -184,10 +184,10 @@ pub fn list_tags(conn: &Connection) -> Vec<String> {
         Err(_) => return out,
     };
     while let Ok(State::Row) = stmt.next() {
-        if let Ok(key) = stmt.read::<String, _>(0) {
-            if let Some(name) = key.strip_prefix("tag_") {
-                out.push(name.to_string());
-            }
+        if let Ok(key) = stmt.read::<String, _>(0)
+            && let Some(name) = key.strip_prefix("tag_")
+        {
+            out.push(name.to_string());
         }
     }
     out
@@ -196,14 +196,11 @@ pub fn list_tags(conn: &Connection) -> Vec<String> {
 pub fn tag_hash(conn: &Connection, tag: &str) -> Option<String> {
     if let Ok(mut stmt) = conn
         .prepare("SELECT c.hash FROM tags t JOIN commits c ON t.commit_id = c.id WHERE t.name = ?")
+        && stmt.bind((1, tag)).is_ok()
+        && let Ok(State::Row) = stmt.next()
+        && let Ok(hash) = stmt.read::<String, _>(0)
     {
-        if stmt.bind((1, tag)).is_ok() {
-            if let Ok(State::Row) = stmt.next() {
-                if let Ok(hash) = stmt.read::<String, _>(0) {
-                    return Some(hash);
-                }
-            }
-        }
+        return Some(hash);
     }
     let key = format!("tag_{tag}");
     let mut stmt = conn

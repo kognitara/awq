@@ -85,7 +85,7 @@ pub fn add_todo(
 
 pub fn list_todos(conn: &Connection) -> Result<(), Error> {
     // On récupère les colonnes, en gérant les NULL potentiels avec des valeurs par défaut
-    let todos = todos(&conn)?;
+    let todos = todos(conn)?;
     if todos.is_empty() {
         ok("No pending tasks. You're all caught up!");
     } else {
@@ -118,7 +118,7 @@ pub fn todos(conn: &Connection) -> Result<Vec<TodoItem>, Error> {
 
 pub fn create_branches_from_todos(conn: &Connection) -> Result<(), Error> {
     for todo in &todos(conn)? {
-        let branch_name = format!("{}", todo.title.replace(" ", "-").replace("_", "-"));
+        let branch_name = todo.title.replace(" ", "-").replace("_", "-").to_string();
         create_branch(conn, branch_name.as_str()).expect("failed to create the branch");
     }
     Ok(())
@@ -138,7 +138,7 @@ pub fn create_branches_from_todo(conn: &Connection, id: i64) -> Result<(), Error
         });
     }
     for todo in &todos {
-        let branch_name = format!("{}", todo.title.replace(" ", "-").replace("_", "-"));
+        let branch_name = todo.title.replace(" ", "-").replace("_", "-").to_string();
         create_branch(conn, branch_name.as_str()).expect("failed to create the branch");
     }
     Ok(())

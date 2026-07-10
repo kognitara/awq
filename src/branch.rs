@@ -66,7 +66,7 @@ pub fn hotfix_start(conn: &Connection, name: &str) -> Result<(), Error> {
         // 1. On vérifie qu'on part bien de 'main' pour avoir la base saine
         let (main_id, _) = get_branch_head_info(conn, source_branch)?;
         if main_id.is_none() {
-            return Err(anyhow!("No main branch has been founded").into());
+            return Err(anyhow!("No main branch has been founded"));
         }
         // 2. On crée la branche manuellement (sans utiliser create_branch qui utilise HEAD)
         let query = "INSERT INTO branches (name, head_commit_id) VALUES (?, ?)";
@@ -156,7 +156,7 @@ pub fn feature_finish(conn: &Connection, name: &str) -> Result<(), Error> {
         stmt.bind((2, target_branch))?;
         stmt.next()?;
         ok("Fast-forward merge complete");
-        delete_branch(conn, &feat_branch.as_str())?;
+        delete_branch(conn, feat_branch.as_str())?;
         ok(&format!("Feat '{name}' finished and branch deleted."));
         Ok(())
     } else {

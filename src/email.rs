@@ -50,9 +50,7 @@ pub fn send(to: &str, subject: &str, message: &str) -> Result<(), Error> {
             ok("Email send successfully");
             Ok(())
         }
-        Err(_) => {
-            Err(Error::other("Failed to send email"))
-        }
+        Err(_) => Err(Error::other("Failed to send email")),
     }
 }
 
@@ -100,7 +98,7 @@ pub fn create_smtp_config(
         username: username.to_string(),
         password: password.to_string(),
         transport: transport.to_string(),
-        port: port,
+        port,
     };
 
     let file = std::fs::File::create(&config_path)?;

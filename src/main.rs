@@ -5,7 +5,7 @@ use crate::branch::{
 };
 use crate::chat::list_messages;
 use crate::chat::send_message;
-use crate::commit::author;
+use crate::commit::{author, sync_to_git};
 use crate::crypto::generate_keypair;
 use crate::db::connect_lys;
 use crate::db::{LYS_INIT, set_config};
@@ -56,7 +56,6 @@ pub mod todo;
 pub mod tree;
 pub mod utils;
 pub mod vcs;
-pub mod web;
 
 fn cli() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))
@@ -460,7 +459,7 @@ fn perform_commit() -> Result<(), Error> {
     )
     .map_err(|e| Error::other(e.to_string()))?;
     todo::complete_todo(&connection, ticket.id).expect("failed to close todo");
-
+    let _ = sync_to_git(message.as_str());
     Ok(())
 }
 pub fn check_status() -> Result<(), Error> {
@@ -852,7 +851,7 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
                         ko("Subject cannot be empty. Please try again.");
                         continue;
                     }
-                    if let Err(_) = email::send(to.as_str(), subject.as_str(), msg.as_str()) {
+                    if email::send(to.as_str(), subject.as_str(), msg.as_str()).is_err() {
                         ko("Failed to send email");
                     }
                     if Confirm::new("Do you want to send another email?")
@@ -984,15 +983,8 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
             }
             Ok(())
         }
-        Some(("serve", args)) => {
-            let port: u16 = args
-                .get_one::<String>("port")
-                .unwrap()
-                .parse()
-                .unwrap_or(3000);
-            let rt = tokio::runtime::Runtime::new()?;
-            // On lance le serveur sur le répertoire actuel
-            rt.block_on(web::start_server(".", port));
+        Some(("serve", _)) => {
+            println!("in rewrite");
             Ok(())
         }
         Some(("import", sub_m)) => {
@@ -1285,11 +1277,10 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
         }
         Some(("health", _)) => {
             if run_hooks().is_ok() {
-                ok("code can be commited");
+                Ok(())
             } else {
-                ko("code must not be commited");
+                Err(Error::other("no valid code"))
             }
-            Ok(())
         }
         Some(("commit", _)) => {
             if read_to_string("syl")
@@ -1550,7 +1541,7 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
                 }
                 Some(("run", args)) => {
                     let current_dir = current_dir()?;
-                    let current_dir_str = current_dir.to_str().unwrap();
+                    let _current_dir_str = current_dir.to_str().unwrap();
                     if !Path::new(".lys").exists() {
                         return Err(Error::other("Not a lys repository."));
                     }
@@ -1650,13 +1641,12 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
                         ok("Web documentation URL updated");
                     }
 
-                    let port: u16 = args
+                    let _port: u16 = args
                         .get_one::<String>("port")
                         .unwrap()
                         .parse()
                         .unwrap_or(3000);
-                    let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(web::start_server(current_dir_str, port));
+                    println!("in rewrite");
                     Ok(())
                 }
                 _ => {

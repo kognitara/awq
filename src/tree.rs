@@ -90,14 +90,12 @@ pub fn list_files(root_path: &Path, max_files: usize) -> Vec<String> {
         if files.len() >= max_files {
             break;
         }
-        if let Ok(entry) = result {
-            if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-                if let Ok(relative) = entry.path().strip_prefix(root_path) {
-                    if !relative.as_os_str().is_empty() {
-                        files.push(relative.to_string_lossy().to_string());
-                    }
-                }
-            }
+        if let Ok(entry) = result
+            && entry.file_type().map(|t| t.is_file()).unwrap_or(false)
+            && let Ok(relative) = entry.path().strip_prefix(root_path)
+            && !relative.as_os_str().is_empty()
+        {
+            files.push(relative.to_string_lossy().to_string());
         }
     }
     files.sort();

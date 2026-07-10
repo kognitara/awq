@@ -1,8 +1,9 @@
 use crate::db::connect_lys;
 use crate::todo::{TodoItem, todos};
-use crate::utils::run_hooks;
+use crate::utils::{ok, run_hooks};
 use chrono::Local;
-use crossterm::style::{Color, Stylize};
+use crossterm::style::Stylize;
+use git2::{IndexAddOption, Repository, Signature};
 use inquire::error::InquireResult;
 use inquire::{Confirm, Editor, InquireError, Select, Text};
 use justify::{Settings, justify};
@@ -42,8 +43,9 @@ pub struct CommitType {
     pub example: &'static str,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum CommitCategory {
+    #[default]
     CoreChanges,
     MaintenanceInfrastructure,
     ProjectEvents,
@@ -52,12 +54,6 @@ pub enum CommitCategory {
     CelestialObjects,
     AstronomicalConcepts,
     SpaceExploration,
-}
-
-impl Default for CommitCategory {
-    fn default() -> Self {
-        Self::CoreChanges
-    }
 }
 
 impl Default for CommitType {
@@ -124,6 +120,57 @@ macro_rules! commit_type {
     };
 }
 
+/// Synchronise automatiquement les changements vers Git.
+/// Prend le message de commit généré par AWQ en paramètre.
+pub fn sync_to_git(commit_message: &str) -> anyhow::Result<()> {
+    // 1. Découvrir le dépôt Git (cherche un .git dans le dossier courant ou parents)
+    // Si aucun dépôt Git n'est trouvé, on quitte silencieusement (AWQ continue sa vie).
+    let repo = match Repository::discover(Path::new(".")) {
+        Ok(r) => r,
+        Err(_) => return Ok(()), // Pas de .git, on ne fait rien
+    };
+
+    // 2. Ajouter tous les fichiers modifiés/ajoutés/supprimés (équivalent de `git add .`)
+    let mut index = repo.index()?;
+    index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None)?;
+    index.write()?;
+
+    // 3. Écrire l'arbre (Tree) à partir de l'index
+    let oid = index.write_tree()?;
+    let tree = repo.find_tree(oid)?;
+
+    // 4. Récupérer l'identité de l'auteur
+    // On essaie de prendre la config Git globale, sinon on met un fallback de sécurité
+    let sig = repo
+        .signature()
+        .unwrap_or_else(|_| Signature::now("AWQ Auto-Sync", "awq@localhost").unwrap());
+
+    // 5. Trouver le parent (HEAD actuel)
+    // C'est nécessaire car le premier commit d'un dépôt n'a pas de parent
+    let parent_commit = match repo.head() {
+        Ok(head) => Some(head.peel_to_commit()?),
+        Err(_) => None,
+    };
+
+    // Construire la liste des références aux parents pour la fonction commit
+    let mut parents = Vec::new();
+    if let Some(ref parent) = parent_commit {
+        parents.push(parent);
+    }
+
+    // 6. Créer le commit dans Git
+    repo.commit(
+        Some("HEAD"),   // Met à jour la référence HEAD
+        &sig,           // Auteur
+        &sig,           // Committer
+        commit_message, // Le message formaté de AWQ
+        &tree,          // L'arbre des fichiers
+        &parents,       // Les parents (0 ou 1)
+    )?;
+
+    ok("Commit added to git");
+    Ok(())
+}
 // Utilisation d'un lazy_static ou simplement d'une fonction de construction
 // pour générer la map des thèmes spatiaux
 pub fn get_space_themes() -> HashMap<CommitCategory, Vec<CommitType>> {
@@ -444,7 +491,7 @@ fn file_stats(
     writeln!(
         f,
         "{prefix}{connector} {} {} {} {}{}",
-        file.white().bold(),
+        file,
         added.to_string().white(),
         deleted.to_string().white(),
         "+".repeat(display_added).green().bold(),
@@ -464,7 +511,7 @@ pub struct Log {
 
 impl Display for Log {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let when = ago(&self.at.as_str());
+        let when = ago(self.at.as_str());
         let when_display = if when.is_empty() {
             self.at.as_str()
         } else {
@@ -475,14 +522,9 @@ impl Display for Log {
         tx.push_record(["Author", "Date", "Signature"]);
         tx.push_record([self.author.as_str(), when_display, self.signature.as_str()]);
         writeln!(f)?;
-        writeln!(f, "{}", tx.build().with(Style::modern()).to_string())?;
+        writeln!(f, "{}", tx.build().with(Style::modern()))?;
         writeln!(f, "{}\n", self.message.to_string().white().bold())?;
-        writeln!(
-            f,
-            "\n.\n├── {} {}",
-            "h".white().bold(),
-            self.signature.to_string().white()
-        )?;
+        writeln!(f, "\n.\n├── h {}", self.signature.to_string().white())?;
 
         if !self.changes.is_empty() {
             let mut root = Tree::default();
@@ -509,10 +551,7 @@ fn insert_into_tree(node: &mut Tree, parts: &[&str], change: FileChange) {
         return;
     }
     let first = parts[0];
-    let child = node
-        .children
-        .entry(first.to_string())
-        .or_insert_with(Tree::default);
+    let child = node.children.entry(first.to_string()).or_default();
     if parts.len() == 1 {
         child.is_file = true;
         child.change = Some(change);
@@ -533,27 +572,19 @@ fn print_tree(f: &mut Formatter<'_>, node: &Tree, prefix: &str, is_root: bool) -
             // Affiche le marqueur et les compteurs
             let marker: (String, usize, usize) = match &child.change {
                 Some(FileChange::Added { added, mode }) => {
-                    let m = mode.map(|v| crate::vcs::format_mode(v)).unwrap_or_default();
+                    let m = mode.map(crate::vcs::format_mode).unwrap_or_default();
                     (
-                        format!(
-                            "{} {}",
-                            m.white().to_string(),
-                            name.clone().white().bold().to_string()
-                        ),
-                        added.clone(),
+                        format!("{} {}", m.white(), name.clone().white().bold()),
+                        *added,
                         0,
                     )
                 }
                 Some(FileChange::Deleted { deleted, mode }) => {
-                    let m = mode.map(|v| crate::vcs::format_mode(v)).unwrap_or_default();
+                    let m = mode.map(crate::vcs::format_mode).unwrap_or_default();
                     (
-                        format!(
-                            "{} {}",
-                            m.white().to_string(),
-                            name.clone().white().bold().to_string()
-                        ),
+                        format!("{} {}", m.white(), name.clone().white().bold()),
                         0,
-                        deleted.clone(),
+                        *deleted,
                     )
                 }
                 Some(FileChange::Modified {
@@ -561,26 +592,18 @@ fn print_tree(f: &mut Formatter<'_>, node: &Tree, prefix: &str, is_root: bool) -
                     deleted,
                     mode,
                 }) => {
-                    let m = mode.map(|v| crate::vcs::format_mode(v)).unwrap_or_default();
+                    let m = mode.map(crate::vcs::format_mode).unwrap_or_default();
                     (
-                        format!(
-                            "{} {}",
-                            m.white().to_string(),
-                            name.clone().white().bold().to_string()
-                        ),
-                        added.clone(),
-                        deleted.clone(),
+                        format!("{} {}", m.white(), name.clone().white().bold()),
+                        *added,
+                        *deleted,
                     )
                 }
                 _ => (String::new(), 0, 0),
             };
             file_stats(f, prefix, connector, marker.0.as_str(), marker.1, marker.2)?;
         } else {
-            writeln!(
-                f,
-                "{prefix}{connector} {}",
-                name.to_string().blue().bold().to_string()
-            )?;
+            writeln!(f, "{prefix}{connector} {}", name.to_string().blue().bold())?;
         }
         let new_prefix = if is_last {
             format!("{}    ", prefix)
@@ -620,23 +643,21 @@ pub fn author() -> String {
         let mut stmt = conn
             .prepare("SELECT value FROM config WHERE key = 'author'")
             .unwrap();
-        if let Ok(sqlite::State::Row) = stmt.next() {
-            if let Ok(val) = stmt.read::<String, _>(0) {
-                if !val.trim().is_empty() {
-                    return val;
-                }
-            }
+        if let Ok(sqlite::State::Row) = stmt.next()
+            && let Ok(val) = stmt.read::<String, _>(0)
+            && !val.trim().is_empty()
+        {
+            return val;
         }
 
         let mut stmt = conn
             .prepare("SELECT value FROM config WHERE key = 'name'")
             .unwrap();
-        if let Ok(sqlite::State::Row) = stmt.next() {
-            if let Ok(val) = stmt.read::<String, _>(0) {
-                if !val.trim().is_empty() {
-                    return val;
-                }
-            }
+        if let Ok(sqlite::State::Row) = stmt.next()
+            && let Ok(val) = stmt.read::<String, _>(0)
+            && !val.trim().is_empty()
+        {
+            return val;
         }
     }
 
@@ -711,30 +732,32 @@ impl Display for Commit {
             self.ticket.description.to_string().as_str(),
         ]);
         writeln!(f)?;
-        writeln!(f, "{}", t.build().with(Style::modern()).to_string())?;
+        writeln!(f, "{}", t.build().with(Style::modern()))?;
         writeln!(f)?;
-        // colorless output for non-terminal environments (like CI/CD pipelines)
         writeln!(
             f,
-            "\n{}: {}\n",
-            tp.last().expect("").trim().to_string().cyan().bold(),
-            self.summary
+            "{}\n",
+            format_args!(
+                "{} - {}",
+                tp.last().expect("").trim(),
+                self.summary.trim_end()
+            ),
         )?;
         writeln!(f)?;
-        writeln!(f, "{}", "What?".with(Color::Cyan).bold())?;
+        writeln!(f, "{}", "What?".bold())?;
         writeln!(f)?;
         writeln!(f, "{}", format_justified(self.what.as_str()).white())?;
 
         writeln!(f)?;
-        writeln!(f, "{}", "Why?".with(Color::Cyan).bold())?;
+        writeln!(f, "{}", "Why?".bold())?;
         writeln!(f)?;
         writeln!(f, "{}", format_justified(self.why.as_str()).white())?;
         writeln!(f)?;
-        writeln!(f, "{}", "How?".with(Color::Cyan).bold())?;
+        writeln!(f, "{}", "How?".bold())?;
         writeln!(f)?;
         writeln!(f, "{}", format_justified(self.how.as_str()).white())?;
         writeln!(f)?;
-        writeln!(f, "{}", "Breaking Changes?".with(Color::Cyan).bold())?;
+        writeln!(f, "{}", "Breaking Changes?".bold())?;
         writeln!(f)?;
         writeln!(
             f,

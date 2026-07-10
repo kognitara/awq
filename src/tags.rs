@@ -25,23 +25,23 @@ use zstd::Decoder;
 pub fn audit_tags() -> Result<(), Error> {
     // Adapte l'erreur selon ton architecture
     let path = Path::new(".lys/tags");
-    create_dir_all(path.to_path_buf())?;
+    create_dir_all(path)?;
 
     let dir = path
         .join(Local::now().year().to_string())
         .join(Season::current().to_string());
-    create_dir_all(dir.to_path_buf())?;
+    create_dir_all(&dir)?;
     for archive in glob(dir.join("*.b3").display().to_string().as_str()).expect("") {
         let x = archive
             .expect("archive not found")
             .canonicalize()
             .expect("a");
 
-        let f = fs::read_to_string(x.to_path_buf())?;
+        let f = fs::read_to_string(&x)?;
         let part = f.split_whitespace().collect::<Vec<&str>>();
         let filename = dir.join(part.last().expect("failed to find file"));
         let hash = part.first().expect("").trim();
-        let file = fs::read(filename.to_path_buf()).expect("failed to read");
+        let file = fs::read(&filename).expect("failed to read");
         let mut h = Hasher::new();
         h.update(&file);
         let archive_hash = h.finalize().to_hex();
@@ -71,14 +71,14 @@ pub fn audit_tags() -> Result<(), Error> {
 pub fn create_archive(conn: &Connection, commit_id: i64, archive_path: &str) -> Result<(), Error> {
     // Adapte l'erreur selon ton architecture
     let path = Path::new(".lys/tags");
-    create_dir_all(path.to_path_buf())?;
+    create_dir_all(path)?;
     let dir = path
         .join(Local::now().year().to_string())
         .join(Season::current().to_string());
-    create_dir_all(dir.to_path_buf())?;
+    create_dir_all(&dir)?;
     let arch = dir.join(archive_path);
     // 1. Préparer la création du fichier final .tar.gz
-    let tar_gz_file = File::create(arch.to_path_buf())?;
+    let tar_gz_file = File::create(&arch)?;
     let enc = GzEncoder::new(tar_gz_file, Compression::default());
     let mut tar_builder = Builder::new(enc);
 
@@ -127,7 +127,7 @@ pub fn create_archive(conn: &Connection, commit_id: i64, archive_path: &str) -> 
     // 8. Finaliser l'écriture de l'archive
     tar_builder.into_inner()?.finish()?;
 
-    let file = fs::read(arch.to_path_buf())?;
+    let file = fs::read(&arch)?;
     let mut h = Hasher::new();
     h.update(&file);
     let archive_hash = h.finalize().to_hex();

@@ -7,10 +7,10 @@ use crossterm::{
 use sqlite::Connection;
 use sqlite::Error;
 use sqlite::State;
-use std::fs::read_to_string;
 use std::io::stdout;
 use std::path::Path;
 use std::process::Command;
+use std::{fs::read_to_string, process::Stdio};
 
 pub fn ok(description: &str) {
     let x = term_width();
@@ -112,11 +112,16 @@ pub fn ok_status(verb: &FileStatus) {
     let desc_width = p.chars().count();
     // 2. Définition des symboles et labels
     let icon = " * "; // Symbole UTF-8 (Checkmark)
-    let status_label = symbol;
-    let brackets = (" [ ", " ] "); // Délimiteurs UTF-8 élégants
+    let padded_text = format!("{:^7}", symbol); // On aligne la chaîne pure d'abord
+    let final_block = format!(
+        "{} {} {}",
+        "[".white().bold(),
+        padded_text.green().bold(),
+        "]".white().bold()
+    );
     // 3. Calcul du padding sécurisé
     // On retire la largeur de l'icone (3), du label (2), des brackets (6) et des espaces
-    let occupied_width = (desc_width + 11) as u16;
+    let occupied_width = (desc_width + 14) as u16;
     let padding = x.saturating_sub(occupied_width);
     let _ = execute!(
         stdout(),
@@ -125,10 +130,8 @@ pub fn ok_status(verb: &FileStatus) {
         Print(p),
         // Remplissage dynamique
         Print(" ".repeat(padding as usize)),
+        Print(final_block),
         // Bloc de statut avec délimiteurs UTF-8
-        Print(brackets.0.white().bold()),
-        Print(status_label.green().bold()),
-        Print(brackets.1.trim_end().white().bold()),
         Print("\n"),
     );
 }
@@ -308,9 +311,17 @@ pub fn run_hooks() -> Result<(), Box<dyn std::error::Error>> {
         ok(&format!("Running hook: {line}"));
 
         let status = if cfg!(target_os = "windows") {
-            Command::new("cmd").args(["/C", line]).status()?
+            Command::new("cmd")
+                .args(["/C", line])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()?
         } else {
-            Command::new("sh").args(["-c", line]).status()?
+            Command::new("sh")
+                .args(["-c", line])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()?
         };
 
         if !status.success() {

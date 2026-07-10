@@ -8,6 +8,12 @@ use std::path::PathBuf;
 
 pub struct Shell;
 
+impl Default for Shell {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Shell {
     pub fn new() -> Self {
         Shell
@@ -22,13 +28,13 @@ impl Shell {
     }
 
     pub fn run(&self) -> Result<(), io::Error> {
-        let mut rl = DefaultEditor::new().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let mut rl = DefaultEditor::new().map_err(|e| io::Error::other(e))?;
 
         let history_path = Self::history_path();
-        if let Some(ref path) = history_path {
-            if path.exists() {
-                let _ = rl.load_history(path);
-            }
+        if let Some(ref path) = history_path
+            && path.exists()
+        {
+            let _ = rl.load_history(path);
         }
 
         let mut stdout = io::stdout();

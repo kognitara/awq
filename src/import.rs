@@ -6,6 +6,7 @@ use git2::{FetchOptions, ObjectType, Oid, RemoteCallbacks, Repository};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::io::Error;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -77,7 +78,7 @@ fn build_vfs_tree_parallel(
     parent_hash: &str,
     indexed: Arc<DashSet<String>>,
     pb: &ProgressBar,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Error> {
     let tree_hash_str = tree_oid.to_string();
 
     if indexed.contains(&tree_hash_str) {
@@ -97,11 +98,11 @@ fn build_vfs_tree_parallel(
                         .find_blob(e.id())
                         .map(|b| b.size() as u64)
                         .unwrap_or(0);
-                } else if kind == ObjectType::Any {
-                    if let Ok(blob) = repo_guard.find_blob(e.id()) {
-                        kind = ObjectType::Blob;
-                        size = blob.size() as u64;
-                    }
+                } else if kind == ObjectType::Any
+                    && let Ok(blob) = repo_guard.find_blob(e.id())
+                {
+                    kind = ObjectType::Blob;
+                    size = blob.size() as u64;
                 }
                 (
                     e.id(),
@@ -165,7 +166,8 @@ fn build_vfs_tree_parallel(
         };
 
         // Insertion dans tree_nodes avec le hash Blake3 !
-        db::insert_tree_node(conn, parent_hash, &name, &entry_hash, mode as i64, size_opt)?;
+        db::insert_tree_node(conn, parent_hash, &name, &entry_hash, mode as i64, size_opt)
+            .expect("");
 
         if let ObjectType::Tree = kind {
             build_vfs_tree_parallel(
@@ -365,14 +367,13 @@ pub fn import_from_git(
             br_stmt.bind((1, last_id))?;
             br_stmt.next()?;
         }
-        if let Ok(repo_guard) = repo.lock() {
-            if let Ok(head) = repo_guard.head() {
-                if let Some(oid) = head.target() {
-                    let _ = set_config(&conn, "git_origin_url", git_url);
-                    let head_str = oid.to_string();
-                    let _ = set_config(&conn, "git_origin_head", head_str.as_str());
-                }
-            }
+        if let Ok(repo_guard) = repo.lock()
+            && let Ok(head) = repo_guard.head()
+            && let Some(oid) = head.target()
+        {
+            let _ = set_config(&conn, "git_origin_url", git_url);
+            let head_str = oid.to_string();
+            let _ = set_config(&conn, "git_origin_head", head_str.as_str());
         }
     }
 
@@ -440,7 +441,7 @@ pub fn import_from_git_and_purge(
     let conn = db::connect_lys(target_dir)?;
     let store_db_path = target_dir.join(".lys/db/store.db");
 
-    let store_conn_raw = sqlite::open(store_db_path.to_path_buf())?;
+    let store_conn_raw = sqlite::open(&store_db_path)?;
     // Ajoute le timeout ici aussi
     store_conn_raw
         .execute("PRAGMA busy_timeout = 5000;")
@@ -467,11 +468,8 @@ pub fn import_from_git_and_purge(
         // On ne garde que les commits dont le timestamp >= cutoff
         let oids: Vec<Oid> = revwalk
             .filter_map(|id| {
-                let oid = id.ok().expect("Failed to get OID");
-                let commit = repo_guard
-                    .find_commit(oid)
-                    .ok()
-                    .expect("Failed to find commit");
+                let oid = id.expect("Failed to get OID");
+                let commit = repo_guard.find_commit(oid).expect("Failed to find commit");
                 if commit.time().seconds() >= cutoff_timestamp {
                     Some(oid)
                 } else {
@@ -577,14 +575,13 @@ pub fn import_from_git_and_purge(
             br_stmt.bind((1, last_id))?;
             br_stmt.next()?;
         }
-        if let Ok(repo_guard) = repo.lock() {
-            if let Ok(head) = repo_guard.head() {
-                if let Some(oid) = head.target() {
-                    let _ = set_config(&conn, "git_origin_url", git_url);
-                    let head_str = oid.to_string();
-                    let _ = set_config(&conn, "git_origin_head", head_str.as_str());
-                }
-            }
+        if let Ok(repo_guard) = repo.lock()
+            && let Ok(head) = repo_guard.head()
+            && let Some(oid) = head.target()
+        {
+            let _ = set_config(&conn, "git_origin_url", git_url);
+            let head_str = oid.to_string();
+            let _ = set_config(&conn, "git_origin_head", head_str.as_str());
         }
     }
 
@@ -709,7 +706,7 @@ pub fn import_updates_from_repo(
 
 pub fn extract_repo_name(url: &str) -> String {
     url.split('/')
-        .last()
+        .next_back()
         .unwrap_or("new_repo")
         .trim_end_matches(".git")
         .to_string()

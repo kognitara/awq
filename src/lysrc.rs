@@ -50,7 +50,7 @@ impl Lysrc {
     }
 
     pub fn get_port(&self) -> u16 {
-        self.port.clone()
+        self.port
     }
 
     pub fn set_description(&mut self, description: &str) -> &mut Self {
