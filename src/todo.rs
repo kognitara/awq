@@ -5,6 +5,7 @@ use std::process::{Command, Stdio};
 use crate::utils::{ko, ok};
 use crate::{branch::create_branch, vcs::internal_pager};
 use sqlite::{Connection, Error, State};
+use tabled::settings::Style;
 use tabled::{Table, Tabled};
 #[derive(Tabled, Clone, Debug, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
 pub struct TodoItem {
@@ -114,8 +115,8 @@ pub fn list_todos(conn: &Connection) -> Result<(), Error> {
     if todos.is_empty() {
         ok("No pending tasks. You're all caught up!");
     } else {
-        let t = Table::new(&todos);
-        if internal_pager(t.to_string()).is_ok() {
+        let mut table = Table::new(&todos);
+        if internal_pager(table.with(Style::modern()).to_string()).is_ok() {
             ok("bye");
         }
     }
