@@ -415,7 +415,7 @@ fn ls_tree_recursive(
             last_commit_for_path_cli(conn, current_path.as_str(), is_dir, until_commit_id)
         {
             commit_hash_str = h[0..7].to_string();
-            let age = time_ago_cli(&ts);
+            let _age = time_ago_cli(&ts);
             let truncated_msg = if msg.len() > 50 {
                 format!("{}...", &msg[..47])
             } else {

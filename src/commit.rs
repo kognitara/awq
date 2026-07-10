@@ -17,8 +17,6 @@ use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
 use std::io::Error;
 use std::path::{Path, PathBuf};
-use tabled::builder::Builder;
-use tabled::settings::Style;
 
 #[doc = "First prompt to ask the user what is the objective of the changes"]
 pub const WHAT: &str = "What is the objective of the changes?";
@@ -564,15 +562,14 @@ impl Display for Log {
         } else {
             when.as_str()
         };
-
-        let mut tx = Builder::new();
-        tx.push_record(["Author", "Date", "Signature"]);
-        tx.push_record([self.author.as_str(), when_display, self.signature.as_str()]);
+        writeln!(
+            f,
+            "Commit {}\nAuthor {}\nDate   {}",
+            self.signature, self.author, when_display,
+        )?;
         writeln!(f)?;
-        writeln!(f, "{}", tx.build().with(Style::modern()))?;
         writeln!(f, "{}\n", self.message.to_string().white().bold())?;
-        writeln!(f, "\n.\n├── h {}", self.signature.to_string().white())?;
-
+        writeln!(f)?;
         if !self.changes.is_empty() {
             let mut root = Tree::default();
             for (path, change) in &self.changes {
@@ -608,13 +605,28 @@ fn insert_into_tree(node: &mut Tree, parts: &[&str], change: FileChange) {
 }
 
 fn print_tree(f: &mut Formatter<'_>, node: &Tree, prefix: &str, is_root: bool) -> std::fmt::Result {
-    // For root, we don't print a name, only its children
-    let len = node.children.len();
-    let mut i = 0usize;
-    for (name, child) in &node.children {
-        i += 1;
-        let is_last = i == len;
+    // On extrait les enfants dans un vecteur pour pouvoir les trier par type
+    let mut children_vec: Vec<(&String, &Tree)> = node.children.iter().collect();
+
+    // Tri : Dossiers d'abord, puis ordre alphabétique
+    children_vec.sort_by(|a, b| {
+        let a_is_dir = !a.1.is_file;
+        let b_is_dir = !b.1.is_file;
+
+        if a_is_dir == b_is_dir {
+            a.0.cmp(b.0) // Si même type, tri alphabétique
+        } else {
+            b_is_dir.cmp(&a_is_dir) // true (dossier) arrive avant false (fichier)
+        }
+    });
+
+    let len = children_vec.len();
+
+    // On itère sur le vecteur trié (attention, enumerate commence à 0)
+    for (i, (name, child)) in children_vec.into_iter().enumerate() {
+        let is_last = i == len - 1;
         let connector = if is_last { "└──" } else { "├──" };
+
         if child.is_file {
             // Affiche le marqueur et les compteurs
             let marker: (String, usize, usize) = match &child.change {
@@ -652,18 +664,22 @@ fn print_tree(f: &mut Formatter<'_>, node: &Tree, prefix: &str, is_root: bool) -
         } else {
             writeln!(f, "{prefix}{connector} {}", name.to_string().blue().bold())?;
         }
+
         let new_prefix = if is_last {
             format!("{}    ", prefix)
         } else {
             format!("{}│   ", prefix)
         };
+
         print_tree(f, child, &new_prefix, false)?;
     }
+
     if is_root && len == 0 {
         // nothing to print
     }
     Ok(())
 }
+
 #[derive(Debug, Clone)]
 pub enum FileChange {
     Added {
@@ -767,7 +783,7 @@ pub fn format_justified(text: &str) -> String {
 impl Display for Commit {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}\n", format_args!("{}", self.summary.trim_end()))?;
-        writeln!(f, "Fixes : {}", self.ticket.id)?;
+        writeln!(f, "Fixes : #{}", self.ticket.id)?;
         writeln!(f, "Title : {}", self.ticket.title)?;
         writeln!(f, "Descr : {}", self.ticket.description)?;
         writeln!(
