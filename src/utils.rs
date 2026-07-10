@@ -66,7 +66,7 @@ pub fn get_branch_infos(
 }
 pub fn ok_merkle_hash(h: &str) {
     let hash = &h[0..7].green().to_string();
-    let m = "  m  ".magenta().bold().to_string();
+    let m = "  m  ".white().bold().to_string();
     let a = "[ ".white().bold().to_string();
     let b = " ]\n".white().bold().to_string();
     let _ = execute!(stdout(), Print(m), Print(a), Print(hash), Print(b));

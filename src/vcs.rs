@@ -421,17 +421,11 @@ fn ls_tree_recursive(
             } else {
                 msg.clone()
             };
-            commit_info = format!(
-                " {} {} {} {}",
-                truncated_msg.white().bold(),
-                "(".white().bold(),
-                age.magenta(),
-                ")".white().bold()
-            );
+            commit_info = truncated_msg.white().italic().to_string();
         }
         let icon = FileIcon::from(current_path.as_str());
         lines.push(format!(
-            "  {}  [ {} ] [ {} ] {} {}{} {}{}",
+            "  {}  [ {} ] [ {} ] {} {}{} {} {}",
             if is_dir {
                 "d".white().bold()
             } else {
@@ -445,7 +439,7 @@ fn ls_tree_recursive(
             if is_dir {
                 name.clone().blue().to_string()
             } else {
-                name.clone().dark_magenta().to_string()
+                name.clone().magenta().bold().to_string()
             },
             commit_info,
         ));

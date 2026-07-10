@@ -767,11 +767,9 @@ pub fn format_justified(text: &str) -> String {
 impl Display for Commit {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}\n", format_args!("{}", self.summary.trim_end()))?;
-        writeln!(f)?;
         writeln!(f, "Fixes : {}", self.ticket.id)?;
         writeln!(f, "Title : {}", self.ticket.title)?;
         writeln!(f, "Descr : {}", self.ticket.description)?;
-        writeln!(f)?;
         writeln!(
             f,
             "Os    : {} {} {}",
