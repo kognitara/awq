@@ -1480,14 +1480,10 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
                             .expect("failed to get todo description");
                         let conn =
                             connect_lys(Path::new(".")).expect("faield to cconnect to the db");
-                        let users = db::get_unique_contributors(&conn)
-                            .unwrap_or(Vec::from([(String::from("me"), 1)]));
-                        let user = Select::new(
-                            "Assign to:",
-                            users.iter().map(|(u, _)| u).collect::<Vec<&String>>(),
-                        )
-                        .prompt()
-                        .expect("failed to get asigned to ");
+                        let users = vec![env!("USER")];
+                        let user = Select::new("Assign to:", users)
+                            .prompt()
+                            .expect("failed to get asigned to ");
                         let date = DateSelect::new("Due date:")
                             .prompt()
                             .expect("failed to get due date");
@@ -1496,7 +1492,7 @@ pub fn execute_matches(app: clap::ArgMatches) -> Result<(), Error> {
                             &conn,
                             title.as_str(),
                             &description,
-                            user.as_str(),
+                            user,
                             date.to_string().as_str(),
                         )
                         .is_ok()
