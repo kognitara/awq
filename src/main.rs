@@ -5,7 +5,7 @@ use crate::branch::{
 };
 use crate::chat::list_messages;
 use crate::chat::send_message;
-use crate::commit::{author, sync_to_git};
+use crate::commit::{author, git_status, sync_to_git};
 use crate::crypto::generate_keypair;
 use crate::db::connect_lys;
 use crate::db::{LYS_INIT, set_config};
@@ -471,6 +471,9 @@ pub fn check_status() -> Result<(), Error> {
 
     let connection =
         connect_lys(Path::new(current_dir_str)).map_err(|e| Error::other(e.to_string()))?;
+    println!();
+    ok("awq changes detected:");
+    println!();
     vcs::status(
         &connection,
         current_dir_str,
@@ -479,6 +482,8 @@ pub fn check_status() -> Result<(), Error> {
             .as_str(),
     )
     .map_err(|e| Error::other(e.to_string()))?;
+    let _ = git_status();
+    println!();
     Ok(())
 }
 

@@ -3,7 +3,7 @@ use crate::todo::{TodoItem, todos};
 use crate::utils::{ok, run_hooks};
 use chrono::Local;
 use crossterm::style::Stylize;
-use git2::{IndexAddOption, Repository, Signature};
+use git2::{IndexAddOption, Repository, Signature, Status};
 use inquire::error::InquireResult;
 use inquire::{Confirm, Editor, InquireError, Select, Text};
 use justify::{Settings, justify};
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
 use std::io::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tabled::builder::Builder;
 use tabled::settings::Style;
 
@@ -120,6 +120,50 @@ macro_rules! commit_type {
     };
 }
 
+/// Récupère le statut Git et l'affiche via l'interface AWQ
+pub fn git_status() -> anyhow::Result<()> {
+    // 1. Découverte silencieuse du dépôt Git
+    let repo = match Repository::discover(".") {
+        Ok(r) => r,
+        Err(_) => return Ok(()), // Pas de dépôt Git, on quitte sans rien faire
+    };
+
+    // 2. Récupération des statuts Git
+    let statuses = repo.statuses(None)?;
+
+    // S'il n'y a aucun changement côté Git, on ne pollue pas la console
+    if statuses.is_empty() {
+        return Ok(());
+    }
+
+    println!();
+    crate::utils::ok("git changes detected:");
+    println!();
+
+    // 3. Mapping et affichage
+    for entry in statuses.iter() {
+        let path_str = entry.path().unwrap_or("");
+        let path = PathBuf::from(path_str);
+        let status = entry.status();
+
+        let file_status = if status.intersects(Status::WT_NEW | Status::INDEX_NEW) {
+            crate::vcs::FileStatus::New(path)
+        } else if status.intersects(Status::WT_MODIFIED | Status::INDEX_MODIFIED) {
+            crate::vcs::FileStatus::Modified(path, 0) // 0 est un ID factice pour l'affichage
+        } else if status.intersects(Status::WT_DELETED | Status::INDEX_DELETED) {
+            crate::vcs::FileStatus::Deleted(path, 0)
+        } else {
+            crate::vcs::FileStatus::Unchanged
+        };
+
+        // On n'affiche que s'il y a une réelle modification reconnue
+        if !matches!(file_status, crate::vcs::FileStatus::Unchanged) {
+            crate::utils::ok_status(&file_status);
+        }
+    }
+
+    Ok(())
+}
 /// Synchronise automatiquement les changements vers Git.
 /// Prend le message de commit généré par AWQ en paramètre.
 pub fn sync_to_git(commit_message: &str) -> anyhow::Result<()> {
