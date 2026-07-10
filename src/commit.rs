@@ -123,6 +123,9 @@ macro_rules! commit_type {
 /// Synchronise automatiquement les changements vers Git.
 /// Prend le message de commit généré par AWQ en paramètre.
 pub fn sync_to_git(commit_message: &str) -> anyhow::Result<()> {
+    let clean_bytes = strip_ansi_escapes::strip(commit_message);
+    let clean_message =
+        String::from_utf8(clean_bytes).unwrap_or_else(|_| commit_message.to_string());
     // 1. Découvrir le dépôt Git (cherche un .git dans le dossier courant ou parents)
     // Si aucun dépôt Git n'est trouvé, on quitte silencieusement (AWQ continue sa vie).
     let repo = match Repository::discover(Path::new(".")) {
@@ -160,12 +163,12 @@ pub fn sync_to_git(commit_message: &str) -> anyhow::Result<()> {
 
     // 6. Créer le commit dans Git
     repo.commit(
-        Some("HEAD"),   // Met à jour la référence HEAD
-        &sig,           // Auteur
-        &sig,           // Committer
-        commit_message, // Le message formaté de AWQ
-        &tree,          // L'arbre des fichiers
-        &parents,       // Les parents (0 ou 1)
+        Some("HEAD"),           // Met à jour la référence HEAD
+        &sig,                   // Auteur
+        &sig,                   // Committer
+        clean_message.as_str(), // Le message formaté de AWQ
+        &tree,                  // L'arbre des fichiers
+        &parents,               // Les parents (0 ou 1)
     )?;
 
     ok("Commit added to git");
