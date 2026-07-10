@@ -1,6 +1,8 @@
 use std::fmt::Display;
+use std::path::Path;
+use std::process::{Command, Stdio};
 
-use crate::utils::ok;
+use crate::utils::{ko, ok};
 use crate::{branch::create_branch, vcs::internal_pager};
 use sqlite::{Connection, Error, State};
 use tabled::{Table, Tabled};
@@ -20,6 +22,23 @@ pub struct TodoItem {
     pub due_date: String,
 }
 
+pub fn create_github_issue(title: &str, body: &str) -> bool {
+    Command::new("gh")
+        .arg("issue")
+        .arg("create")
+        .arg("--title")
+        .arg(title)
+        .arg("--body")
+        .arg(body)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .current_dir(".")
+        .spawn()
+        .expect("missing gh cli binary")
+        .wait()
+        .expect("failed to wait")
+        .success()
+}
 impl Display for TodoItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let in_time = if self.due_date == "No limit" {
@@ -80,7 +99,13 @@ pub fn add_todo(
     stmt.bind((3, assigned_to))?;
     stmt.bind((4, due_date))?;
     stmt.next()?;
-    Ok(())
+    if Path::new(".git").is_dir() && create_github_issue(title, description) {
+        ok("github issue created");
+        Ok(())
+    } else {
+        ko("failed to create github issue check if github-cli is installed");
+        Ok(())
+    }
 }
 
 pub fn list_todos(conn: &Connection) -> Result<(), Error> {
