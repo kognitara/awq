@@ -460,7 +460,36 @@ fn perform_commit() -> Result<(), Error> {
     .map_err(|e| Error::other(e.to_string()))?;
     todo::complete_todo(&connection, ticket.id).expect("failed to close todo");
     let _ = sync_to_git(message.as_str());
-    Ok(())
+    if Path::new(".git").is_dir() {
+        ok("Sending modification to the remote...");
+    }
+    if Path::new(".git").is_dir()
+        && std::process::Command::new("git")
+            .args(["push", "--all"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .current_dir(".")
+            .spawn()
+            .expect("failed to push modif")
+            .wait()
+            .expect("failed to wait")
+            .success()
+        && std::process::Command::new("git")
+            .args(["push", "--tags"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .current_dir(".")
+            .spawn()
+            .expect("failed to push modif")
+            .wait()
+            .expect("failed to wait")
+            .success()
+    {
+        ok("Modification has be pushed to the remote");
+        Ok(())
+    } else {
+        Ok(())
+    }
 }
 pub fn check_status() -> Result<(), Error> {
     let current_dir = current_dir()?;
