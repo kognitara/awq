@@ -1232,7 +1232,7 @@ pub fn files() -> Vec<String> {
         .standard_filters(true)
         .threads(4)
         .add_custom_ignore_filename("syl")
-        .hidden(true)
+        .hidden(false)
         .build();
     let files = walk.collect::<Vec<Result<DirEntry, ignore::Error>>>();
     for file in files.iter().flatten() {
@@ -1322,6 +1322,7 @@ pub fn commit(conn: &Connection, message: &str, author: &str, ticket: &str) -> R
         .threads(4)
         .add_custom_ignore_filename("syl")
         .standard_filters(true)
+        .hidden(false)
         .build();
 
     for result in walk.flatten() {
