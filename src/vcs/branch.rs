@@ -256,7 +256,7 @@ pub fn print_branch(meta: &BranchMetadata, current: bool, feature: bool, hotfix:
 
     // On fabrique une seule colonne de 24 caractères (ex: "crt:2d  upd:1h  cmt:5m  ")
     let dates_col = format!("crt:{:<3} upd:{:<3} cmt:{:<3}", c_ago, u_ago, comm_ago);
-    let dates_styled = dates_col.dark_grey(); // En gris pour ne pas distraire
+    let dates_styled = dates_col.white(); // En gris pour ne pas distraire
 
     // Synchro : ex "↑2 ↓0" (toujours aligné sur 8 caractères)
     let sync_text = format!("↑{} ↓{}", meta.ahead, meta.behind);
@@ -304,8 +304,8 @@ pub fn print_branch(meta: &BranchMetadata, current: bool, feature: bool, hotfix:
             dates_styled,
             sync_col.yellow(),
             diff_col,
-            commits_col.dark_grey(),
-            devs_col.dark_grey(),
+            commits_col.white(),
+            devs_col.white(),
             author_col.magenta(),
             msg_truncated.white() // <-- Le message en gris italique à la fin !
         ))
