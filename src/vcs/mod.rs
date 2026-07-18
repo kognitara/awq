@@ -33,7 +33,7 @@ pub fn tt(lang: &LanguageIdentifier, key: &str) -> String {
 
 pub fn ok(t: &str) {
     let x = term_width();
-    let symbol = "  ok  ";
+    let symbol = "ok";
     // 1. Calcul de la largeur réelle des caractères UTF-8
     let desc_width = t.chars().count();
     // 2. Définition des symboles et labels
@@ -47,7 +47,7 @@ pub fn ok(t: &str) {
     );
     // 3. Calcul du padding sécurisé
     // On retire la largeur de l'icone (3), du label (2), des brackets (6) et des espaces
-    let occupied_width = (desc_width + 17) as u16;
+    let occupied_width = (desc_width + 14) as u16;
     let padding = x.saturating_sub(occupied_width);
     let _ = execute!(
         stdout(),
@@ -136,7 +136,7 @@ pub fn ko(t: &str) {
     );
     // 3. Calcul du padding sécurisé
     // On retire la largeur de l'icone (3), du label (2), des brackets (6) et des espaces
-    let occupied_width = (desc_width + 17) as u16;
+    let occupied_width = (desc_width + 14) as u16;
     let padding = x.saturating_sub(occupied_width);
     let _ = execute!(
         stdout(),
