@@ -1161,13 +1161,16 @@ impl Display for Log {
         writeln!(
             f,
             "Commit {}\nAuthor {}\nDate   {}\nTicket {}",
-            self.signature, self.author, when_display, self.ticket
+            self.signature.clone().yellow().bold(),
+            self.author.clone().cyan(),
+            when_display.green(),
+            self.ticket.clone().magenta().bold()
         )?;
         writeln!(f)?;
         writeln!(f, "{}\n", self.message.to_string().white().bold())?;
-        writeln!(f, "Fixes : #{}", self.ticket_id)?;
-        writeln!(f, "Title : {}", self.ticket)?;
-        writeln!(f, "Descr : {}", self.ticket_description)?;
+        writeln!(f, "Fixes : #{}", self.ticket_id.clone().green())?;
+        writeln!(f, "Title : {}", self.ticket.clone().magenta().bold())?;
+        writeln!(f, "Descr : {}", self.ticket_description.clone().white())?;
         writeln!(f, ".")?;
         let mut root = Tree::default();
         for (path, change) in &self.changes {
