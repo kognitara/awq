@@ -16,6 +16,8 @@ pub mod init;
 pub mod keys;
 pub mod sync;
 pub mod todo;
+pub mod tree;
+
 static_loader! {
     pub static LOCALES = {
         locales: "./locales",

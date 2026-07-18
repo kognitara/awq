@@ -27,6 +27,7 @@ fn cli() -> Command {
         .subcommand(Command::new("hooks").about("Manage hooks interactively"))
         .subcommand(Command::new("health").about("Run all hooks without commit"))
         .subcommand(Command::new("push").about("Push modifications"))
+        .subcommand(Command::new("tree").about("Display the repository tree of the current branch"))
         .subcommand(
             Command::new("branch")
                 .about("Branches management")
@@ -54,6 +55,13 @@ async fn main() -> ExitCode {
     match app.subcommand() {
         Some(("init", _)) => {
             if init_awq(&locale()).await {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Some(("tree", _)) => {
+            if crate::vcs::tree::awq_tree().await.is_ok() {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
