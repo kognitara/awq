@@ -23,3 +23,8 @@ commit-no-sent = Failed to push commit
 ticket-closed-successfully = Ticket marked as DONE
 failed-to-close-ticket = Could not close the associated ticket
 signature-is-valid = Commit signature verified
+
+
+# Init
+
+cant-init-the-home = It's no possible to init the home directory

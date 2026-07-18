@@ -2,13 +2,22 @@ use crate::vcs::db::AWQ_DB_PATH;
 use crate::vcs::db::conn;
 use crate::vcs::hooks::awq_auto_setup_hooks;
 use crate::vcs::keys::awq_generate_keypair;
+use crate::vcs::ko;
 use crate::vcs::ok;
 use crate::vcs::tt;
+use std::env::current_dir;
 use std::path::Path;
 use tokio::fs::{File, create_dir_all};
 use unic_langid::LanguageIdentifier;
 
 pub async fn init_awq(lang: &LanguageIdentifier) -> bool {
+    let home = dirs::home_dir().expect("no home");
+    let current = current_dir().expect("failed to get current dir");
+    if home.eq(&current) {
+        ko(&tt(lang, "cant-init-the-home"));
+        return false;
+    }
+
     create_dir_all(".awq").await.expect("failed to create dir");
 
     if Path::new(AWQ_DB_PATH).exists().eq(&false) {
