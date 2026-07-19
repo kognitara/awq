@@ -1,5 +1,9 @@
+use std::path::Path;
+
 use crossterm::style::Stylize;
 use sqlx::{Row, SqliteConnection};
+
+use crate::vcs::{db::AWQ_DB_PATH, ko, locale, tt};
 
 #[async_recursion::async_recursion]
 pub async fn print_merkle_tree(
@@ -64,6 +68,10 @@ pub async fn print_merkle_tree(
 }
 
 pub async fn awq_tree() -> Result<(), anyhow::Error> {
+    if Path::new(AWQ_DB_PATH).exists().eq(&false) {
+        ko(&tt(&locale(), "not-awq-db-found"));
+        return Ok(());
+    }
     let pool = crate::vcs::db::conn().await;
     let mut conn = pool.acquire().await?;
 

@@ -1,5 +1,6 @@
 # DB
 db-init-success = awq database ready to use
+not-awq-db-found = awq database not founded
 
 # KEYS
 keys-generated = awq signing keys has been generated successfully
@@ -28,3 +29,4 @@ signature-is-valid = Commit signature verified
 # Init
 
 cant-init-the-home = It's no possible to init the home directory
+use-memory = Not database has been founded use memory run `awq init` first 

@@ -2,12 +2,25 @@ use sqlx::Row;
 use sqlx::SqlitePool;
 use sqlx::query;
 use sqlx::sqlite::SqliteRow;
+use std::path::Path;
+
+use crate::vcs::locale;
+use crate::vcs::ok;
+use crate::vcs::tt;
 pub const AWQ_DB_PATH: &str = ".awq/awq.db";
 
 pub async fn conn() -> SqlitePool {
-    SqlitePool::connect("sqlite://.awq/awq.db")
-        .await
-        .expect("no database file")
+    if Path::new(AWQ_DB_PATH).exists() {
+        SqlitePool::connect("sqlite://.awq/awq.db")
+            .await
+            .expect("no database file")
+    } else {
+        ok(&tt(&locale(), "use-memory"));
+
+        SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("failed")
+    }
 }
 pub async fn fetch(sql: &'static str) -> Vec<SqliteRow> {
     query(sql).fetch_all(&conn().await).await.expect("")
