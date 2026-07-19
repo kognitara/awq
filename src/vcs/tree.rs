@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crossterm::style::Stylize;
+use devicons::FileIcon;
 use sqlx::{Row, SqliteConnection};
 
 use crate::vcs::{db::AWQ_DB_PATH, ko, locale, tt};
@@ -30,7 +31,7 @@ pub async fn print_merkle_tree(
         let name: String = row.get(0);
         let hash: String = row.get(1);
         let mode: i64 = row.get(2);
-
+        let icon = FileIcon::from(name.as_str());
         let is_last = i == len - 1;
         let connector = if is_last { "└──" } else { "├──" };
         let is_dir = (mode & 0o170000) == 0o040000;
@@ -56,10 +57,11 @@ pub async fn print_merkle_tree(
         } else {
             // Affichage d'une feuille (Fichier/Blob)
             println!(
-                "[ {} ] {} {} {}",
+                "[ {} ] {} {} {} {}",
                 short_hash.yellow(),
                 prefix,
                 connector,
+                icon.icon,
                 name.white()
             );
         }
