@@ -123,7 +123,7 @@ pub async fn todos() -> Vec<TodoItem> {
         FROM todos t
         LEFT JOIN users u ON t.assignee_id = u.id
         WHERE t.status != 'DONE' 
-        ORDER BY t.due_date ASC
+        ORDER BY t.id ASC
     ";
 
     for todo in &fetch(query).await {
